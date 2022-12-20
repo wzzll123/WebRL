@@ -367,7 +367,7 @@ class RepairWeb():
         # print(rootSoup.html.attrs['xpath'])
         el = self.driver.find_element_by_xpath(rootSoup.html.attrs['xpath'])
         self.allNodeRec = []
-        self.assignNodeLocationMain(rootSoup.html,el,widgetLocation)
+        self.assignNodeLocationMain(rootSoup.html, el, widgetLocation)
         result = self.allNodeRec
         self.allNodeRec = []
         for leafNode in result:
@@ -507,7 +507,8 @@ class RepairWeb():
             # print("oldHtmlNode:" + str(oldHtmlNode))
             try:
                 el = RecordScreenAndWidght.RecordScreenAndWidget.getElementByRecordStep(self.driver, oldTestStep)
-                self.performTestAction(oldTestStep, el)
+                # self.performTestAction(oldTestStep, el)
+                oldActionPointer+=1
                 continue
             except:
                 print("encounter a broken test step")
@@ -629,97 +630,10 @@ class RepairWeb():
         outputFile.write(str.decode('utf-8'))
         outputFile.close()
 
-    # 匹配父节点
-    def getMatchedParentNodeByOldNode(self, oldWidget, matchedNodePair, possibleMatchPair, notMatchedNewNodeList):
-        matchedNode = None
-        self.mainLogger.info('oldWidget:' + str(oldWidget))
 
-        for item in matchedNodePair.keys():
-            if item.get('x') == oldWidget['x'] and item.get('y') == oldWidget['y'] and item.get('w') == oldWidget[
-                'w'] and item.get('h') == oldWidget['h']:
-                matchedNode = matchedNodePair[item]
-                return True, item, 'isSureMatch', matchedNode
 
-        for item in possibleMatchPair.keys():
-            if item.get('x') == oldWidget['x'] and item.get('y') == oldWidget['y'] and item.get('w') == oldWidget[
-                'w'] and item.get('h') == oldWidget['h']:
-                matchedNodeList = possibleMatchPair[item]
-                return True, item, 'isPossibleMatch', matchedNodeList
 
-        return True, None, 'noneMatch', notMatchedNewNodeList
 
-    # 匹配子节点
-    def getMatchedChildNodeByOldNode(self, oldWidget, matchedNodePair, possibleMatchPair, notMatchedOldNodeList,
-                                     notMatchedNewNodeList, matchedParentNodePairList):
-        matchedNode = None
-        # Logger.mainLogger.info('oldWidget:'+str(oldWidget))
-
-        for item in matchedNodePair.keys():
-            if item.get('x') == oldWidget['x'] and item.get('y') == oldWidget['y'] and item.get('w') == oldWidget[
-                'w'] and item.get('h') == oldWidget['h']:
-                matchedNode = matchedNodePair[item]
-                return True, item, 'isSureMatch', matchedNode
-
-        for item in matchedParentNodePairList.keys():
-            if item.get('x') == oldWidget['x'] and item.get('y') == oldWidget['y'] and item.get('w') == oldWidget[
-                'w'] and item.get('h') == oldWidget['h']:
-                # Logger.mainLogger.info('parent node has more evidence to be a correct node.')
-                matchedNode = matchedParentNodePairList[item]
-                return False, item, 'isSureMatch', matchedNode
-
-        for item in possibleMatchPair.keys():
-            if item.get('x') == oldWidget['x'] and item.get('y') == oldWidget['y'] and item.get('w') == oldWidget[
-                'w'] and item.get('h') == oldWidget['h']:
-                matchedNodeList = possibleMatchPair[item]
-                return True, item, 'isPossibleMatch', matchedNodeList
-
-        for item in notMatchedOldNodeList:
-            if item.get('x') == oldWidget['x'] and item.get('y') == oldWidget['y'] and item.get('w') == oldWidget[
-                'w'] and item.get('h') == oldWidget['h']:
-                return True, item, 'noneMatch', notMatchedNewNodeList
-
-        return False, None, None, None
-
-    def queryModel(self, testCaseList, sStart, sEnd):
-        for testCase in testCaseList:
-            testCase_ = list(filter(lambda x: '.sleep' not in x['handle'], testCase))
-            pointer = 0
-            while pointer < len(testCase_) - 1:
-                if testCase_[pointer]['sIndex'] == sStart and testCase_[pointer + 1]['sIndex'] == sEnd:
-                    return testCase_[pointer]['targetNode'], testCase_[pointer]
-
-                pointer += 1
-        return None, None
-
-    # app restart
-    def restartApp(self):
-        self.driver.quit()
-        time.sleep(1)
-        self.driver = webdriver.Remote('http://0.0.0.0:4723/wd/hub', self.desired_caps)
-        self.driver.implicitly_wait(20)
-
-    # validate fix
-    def validateFix(self, testCase, oldActionPointer):
-        htmlNewNode = str(self.driver.page_source)
-        # load reference layout of the based version app
-        oracleXmlAsOldNode = self.loadLayout(testCase, oldActionPointer)
-        givenThreshold = 0.5
-        htmlCheck = htmlMatch.HtmlProcess()
-        isChecked, _, _, _, _, _, _, _ = htmlCheck.isHtmlMatch(oracleXmlAsOldNode, htmlNewNode, False, True,
-                                                             givenThreshold)
-        return isChecked
-
-    def loadLayout(self, testCase, stepIndex):
-        if 'nextHtml' not in testCase[stepIndex]:
-            i = 1
-            # 跳过 sleep 类型的test action
-            while testCase[stepIndex + i]['html'] == '':
-                i = i + 1
-            oracleXmlAsOldNode = testCase[stepIndex + i]['html']
-        else:
-            oracleXmlAsOldNode = testCase[stepIndex]['nextHtml']
-
-        return oracleXmlAsOldNode
 
     # 触发具体的测试动作
     @calculate_time()
@@ -739,60 +653,7 @@ class RepairWeb():
         elif "driver.back()" in testStep['handle'] and testStep['handle'][0] != "#":
             self.driver.back()
 
-    def rankGlobalCandidate(self, oldNode, currentState, globalTextUpdateList,
-                            givenTriedTimes=5):  # [sIndex,mappedNode]
-        # todo the rank method is given later used by oldNode
-        res1 = []
-        res2 = []
-        num = 0
 
-        for sIndex, globalItemList in globalTextUpdateList.items():
-            if int(sIndex) == int(currentState):
-                for globalItem in globalItemList:
-
-                    if num > givenTriedTimes:
-                        break
-
-                    res1.append([sIndex, globalItem])
-                    num = num + 1
-
-        for sIndex, globalItemList in globalTextUpdateList.items():
-            if int(sIndex) != int(currentState):
-                for globalItem in globalItemList:
-
-                    if num > givenTriedTimes:
-                        break
-
-                    res2.append([sIndex, globalItem])
-                    num = num + 1
-
-        return res1, res2
-
-    # 找到可能的链接路径
-    def findPendedPath(self, currentState, globalRepairCandidateState, upperStep=5):
-
-        repairTestCase = []
-
-        stopFlag = False
-        for testCase in self.testCaseList:
-
-            if stopFlag:
-                break
-
-            for indexStep, testStep in enumerate(testCase):
-                if testStep['sIndex'] == currentState:
-                    targetIndex = -1
-                    for i in range(upperStep):
-                        if testCase[min(indexStep + i + 1, len(testCase) - 1)]['sIndex'] == globalRepairCandidateState:
-                            targetIndex = min(indexStep + i + 1, len(testCase) - 1)
-                            break
-
-                    if targetIndex != -1:
-                        repairTestCase = testCase[indexStep:targetIndex]
-                        stopFlag = True
-                        break
-
-        return repairTestCase
 
 
 
@@ -813,258 +674,7 @@ class RepairWeb():
 
         self.mainLogger.info("error in get Handle")
         exit(-1)
-    def getCandidateThisTime(self, targetNode, testStep):
-        if isinstance(targetNode, dict):
-            targetElement = targetNode
-            # self.mainLogger.info('=============================================================')
-            self.mainLogger.info('candidate here is:' + str(targetElement))
-        else:
-            # self.mainLogger.info('=============================================================')
-            self.mainLogger.info('candidate here is:' + str(targetNode.attrib))
-        # todo click point return False
-        notNeedRepair = self.isInTargetNode(testStep, targetElement)
 
-        # todo quota define
-        if 'content-desc' in targetElement and 'content-descIndex' in targetElement.keys() and targetElement[
-            'content-descIndex'] == 0:
-            el_repair = self.driver.find_element_by_accessibility_id(targetElement['content-desc'])
-            # el_repair = self.e.desc(targetElement['content-desc'])
-            repairHandleStr = 'self.e.desc("' + targetElement['content-desc'] + '")'
-            # self.mainLogger.info('candidate constructed handle:' + repairHandleStr)
-            return el_repair, notNeedRepair, repairHandleStr
-        elif 'content-desc' in targetElement and 'content-descIndex' in targetElement.keys() and targetElement[
-            'content-descIndex'] != 0:
-            el_repair = self.driver.find_elements_by_accessibility_id(targetElement['content-desc'])[
-                targetElement['content-descIndex']]
-            # el_repair = self.e.desc(targetElement['content-desc']).instance(targetElement['content-descIndex'])
-            repairHandleStr = 'self.e.desc("' + targetElement['content-desc'] + '")' + '.instance(' + str(
-                targetElement['content-descIndex']) + ')'
-            # self.mainLogger.info('candidate constructed handle:' + repairHandleStr)
-            return el_repair, notNeedRepair, repairHandleStr
-        elif 'text' in targetElement and 'textIndex' in targetElement.keys() and targetElement[
-            'textIndex'] == 0 and False:
-            # self.mainLogger.info('not support text now')
-            el_repair = self.e.text(targetElement['text'])
-            repairHandleStr = 'self.e.text("' + targetElement['text'] + '")'
-            # self.mainLogger.info('candidate constructed handle:' + repairHandleStr)
-            return el_repair, notNeedRepair, repairHandleStr
-        elif 'text' in targetElement and 'textIndex' in targetElement.keys() and targetElement[
-            'textIndex'] != 0 and False:
-            # self.mainLogger.info('not support text now')
-            el_repair = self.e.text(targetElement['text']).instance(targetElement['textIndex'])
-            repairHandleStr = 'self.e.text("' + targetElement['text'] + '")' + '.instance(' + str(
-                targetElement['textIndex']) + ')'
-            # self.mainLogger.info('candidate constructed handle:' + repairHandleStr)
-            return el_repair, notNeedRepair, repairHandleStr
-        elif 'resource-id' in targetElement and 'idIndex' in targetElement.keys() and targetElement['idIndex'] == 0:
-            el_repair = self.driver.find_element_by_id(targetElement['resource-id'])
-            # el_repair = self.e.rid(targetElement['resource-id'])
-            repairHandleStr = 'self.e.rid("' + targetElement['resource-id'] + '")'
-            # self.mainLogger.info('candidate constructed handle:' + repairHandleStr)
-            return el_repair, notNeedRepair, repairHandleStr
-        elif 'resource-id' in targetElement and 'idIndex' in targetElement.keys() and targetElement['idIndex'] != 0:
-            assert isinstance(targetElement['idIndex'], int)
-            el_repair = self.driver.find_elements_by_id(targetElement['resource-id'])[targetElement['idIndex']]
-
-            # el_repair = self.e.rid(targetElement['resource-id']).instance(targetElement['idIndex'])
-            repairHandleStr = 'self.e.rid("' + targetElement['resource-id'] + '")' + '.instance(' + str(
-                targetElement['idIndex']) + ')'
-            # self.mainLogger.info('candidate constructed handle:' + repairHandleStr)
-            return el_repair, notNeedRepair, repairHandleStr
-        elif 'class' in targetElement and 'classIndex' in targetElement.keys() and targetElement['classIndex'] != 0:
-            el_repair = self.driver.find_elements_by_class_name(targetElement['class'])[targetElement['classIndex']]
-            # el_repair = self.e.cls_name(targetElement['class']).instance(targetElement['classIndex'])
-            repairHandleStr = 'self.e.cls_name("' + targetElement['class'] + '")' + '.instance(' + str(
-                targetElement['classIndex']) + ')'
-            # self.mainLogger.info('candidate constructed handle:' + repairHandleStr)
-            return el_repair, notNeedRepair, repairHandleStr
-        else:
-            el_repair = self.driver.find_element_by_class_name(targetElement['class'])
-
-            # el_repair = self.e.cls_name(targetElement['class'])
-            repairHandleStr = 'self.e.cls_name("' + targetElement['class'] + '")'
-            # self.mainLogger.info('candidate constructed handle:' + repairHandleStr)
-            return el_repair, notNeedRepair, repairHandleStr
-        # self.mainLogger.info(str(targetElement))
-        self.mainLogger.info("error in get Handle")
-        exit(-1)
-
-    # 是否需要维护？
-    def isInTargetNode(self, testStep, targetElement):
-        handleIndex = 0
-        if 'find_element_by_id' in testStep['handle'] and testStep['handle'][0] != '#':
-            handleIndex = 0
-            idType = 'rid'
-            idName = testStep['handle'].strip().split('_id')[1][2:-2]
-        elif 'find_element_by_accessibility_id' in testStep['handle'] and testStep['handle'][0] != '#':
-            handleIndex = 0
-            idType = 'description'
-            idName = testStep['handle'].strip().split('_id')[1][2:-2]
-        elif 'find_element_by_class_name' in testStep['handle'] and testStep['handle'][0] != '#':
-            handleIndex = 0
-            idType = 'class'
-            idName = testStep['handle'].strip().split('_name')[1][2:-2]
-        elif 'find_element_by_xpath' in testStep['handle'] and testStep['handle'][0] != '#':
-            handleIndex = 0
-            idType = 'xpath'
-            idName = testStep['handle'].strip().split('_xpath')[1][2:-2]
-
-        elif 'find_elements_by_id' in testStep['handle'] and testStep['handle'][0] != '#':
-            handleIndex = int(testStep['handle'].strip().split(')[')[1][0:-1])
-            idType = 'rid'
-            idName = testStep['handle'].strip().split('_id')[1][2:].split(')')[0][0:-1]
-            print('1226idName : ' + idName)
-        elif 'find_elements_by_accessibility_id' in testStep['handle'] and testStep['handle'][0] != '#':
-            handleIndex = int(testStep['handle'].strip().split(')[')[1][0:-1])
-            idType = 'description'
-            idName = testStep['handle'].strip().split('_id')[1][2:].split(')')[0][0:-1]
-        elif 'find_elements_by_class_name' in testStep['handle'] and testStep['handle'][0] != '#':
-            handleIndex = int(testStep['handle'].strip().split(')[')[1][0:-1])
-            idType = 'class'
-            idName = testStep['handle'].strip().split('_name')[1][2:].split(')')[0][0:-1]
-        elif 'find_element_by_android_uiautomator' in testStep['handle'] and testStep['handle'][0] != '#':
-            handleIndex = 0
-            idType = 'text'
-            idName = testStep['handle'].strip().split('_uiautomator')[1][2:][0:-2].replace("\\", "")
-            idName = idName.split("\"")[1]
-        else:
-            raise RuntimeError('error here ' + testStep['handle'])
-
-        if idType == 'text':
-            if idName == targetElement['text'] and handleIndex == targetElement['textIndex']:
-                return True
-        elif idType == 'description':
-            if idName == targetElement['content-desc'] and handleIndex == targetElement['content-descIndex']:
-                return True
-        elif idType == 'rid':
-            print('targetElement : ')
-            print(targetElement)
-            if idName == targetElement['resource-id'] and handleIndex == targetElement['idIndex']:
-                return True
-        elif idType == 'class':
-            if idName == targetElement['class'] and handleIndex == targetElement['classIndex']:
-                return True
-        else:
-            return True  # todo special handle selector process
-            raise RuntimeError('record old version, selector should be checked and updated')
-
-        return False
-
-    @staticmethod
-    def rankCandidateBySift(oldNode, oldwidget, oldClass, oldPic, newPic, candidates):
-
-        # pic similarity text similarity classType
-
-        similarPoints = ImageUtil.ImageUtil.getSiftBase64(oldPic, newPic, oldwidget, sift_ratio=0.8)
-
-        rankedCandidate = []
-        candidateRankDic = {}
-
-        sIndex = -1
-
-        for candidate in candidates:
-            if not isinstance(candidate, list):
-                sum = 0
-                for (x, y) in similarPoints:
-                    if y > candidate.get('y') and y < candidate.get('y') + candidate.get('h') and x > candidate.get(
-                            'x') and x < candidate.get('x') + candidate.get('w'):
-                        sum = sum + 1
-                candidateRankDic[candidate] = sum * 1.0 / candidate.get('h') / candidate.get('w')
-
-                if rankedCandidate == []:
-                    rankedCandidate.append(candidate)
-                else:
-                    for index, item in enumerate(rankedCandidate):
-                        if candidateRankDic[candidate] > candidateRankDic[item]:
-                            rankedCandidate.insert(index, candidate)
-                            break
-
-                        if candidateRankDic[candidate] == candidateRankDic[item]:
-                            if oldClass == candidate.get('class'):
-                                rankedCandidate.insert(index, candidate)
-                                break
-
-                        if index == len(rankedCandidate) - 1:
-                            rankedCandidate.append(candidate)
-                            break
-
-            else:
-                sum = 0
-
-                sIndex = candidate[0]
-
-                for (x, y) in similarPoints:
-                    if y > candidate[1]['y'] and y < candidate[1]['y'] + candidate[1]['h'] and x > candidate[1][
-                        'x'] and x < candidate[1]['x'] + candidate[1]['w']:
-                        sum = sum + 1
-                candidateRankDic[str(candidate[1])] = sum * 1.0 / candidate[1]['h'] / candidate[1]['w']
-
-                if rankedCandidate == []:
-                    rankedCandidate.append(candidate[1])
-                else:
-                    for index, item in enumerate(rankedCandidate):
-                        if candidateRankDic[str(candidate[1])] > candidateRankDic[str(item)]:
-                            rankedCandidate.insert(index, candidate[1])
-                            break
-
-                        if candidateRankDic[str(candidate[1])] == candidateRankDic[str(item)]:
-                            if oldClass == candidate[1]['class']:
-                                rankedCandidate.insert(index, candidate[1])
-                                break
-
-                        if index == len(rankedCandidate) - 1:
-                            rankedCandidate.append(candidate[1])
-                            break
-
-        if len(rankedCandidate) != 0 and isinstance(rankedCandidate[0], dict):
-            rankedCandidate = sorted(rankedCandidate,
-                                     key=lambda student: ImageUtil.ImageUtil.isTwoTextSimilar(oldNode.get('text'),
-                                                                                              student['text']),
-                                     reverse=True)
-        elif len(rankedCandidate) != 0:
-            rankedCandidate = sorted(rankedCandidate,
-                                     key=lambda student: ImageUtil.ImageUtil.isTwoTextSimilar(oldNode.get('text'),
-                                                                                              student.get('text')),
-                                     reverse=True)
-
-        # assert (len(rankedCandidate) == len(candidates), 'the number of rank candidates should remains')
-        if sIndex == -1:
-            return rankedCandidate
-        else:
-            # globalText process
-            res_ = [[sIndex, item] for item in rankedCandidate]
-            return res_
-
-    # 获得与父节点coverage最大的子节点
-    def getMaxCoverdChildNodeByParentNode(self, parentWidget, matchedNodePair, possibleMatchPair,
-                                          notMatchedOldNodeList):
-        self.mainLogger.info('oldWidget:' + str(parentWidget))
-
-        for item in matchedNodePair.keys():
-            if parentWidget['x'] <= item.get('x') and parentWidget['x'] + parentWidget['w'] >= item.get('x') + item.get(
-                    'w') and \
-                    parentWidget['y'] <= item.get('y') and parentWidget['y'] + parentWidget['h'] >= item.get(
-                'y') + item.get('h'):
-                self.mainLogger.info('child node in sureMatchedPair of the oldWidget:' + str(item.attrib))
-                return {'x': item.get('x'), 'y': item.get('y'), 'w': item.get('w'), 'h': item.get('h')}
-
-        for item in possibleMatchPair.keys():
-            if parentWidget['x'] <= item.get('x') and parentWidget['x'] + parentWidget['w'] >= item.get('x') + item.get(
-                    'w') and \
-                    parentWidget['y'] <= item.get('y') and parentWidget['y'] + parentWidget['h'] >= item.get(
-                'y') + item.get('h'):
-                self.mainLogger.info('child node in possibleMatchedPair of the oldWidget:' + str(item.attrib))
-                return {'x': item.get('x'), 'y': item.get('y'), 'w': item.get('w'), 'h': item.get('h')}
-
-        for item in notMatchedOldNodeList:
-            if parentWidget['x'] <= item.get('x') and parentWidget['x'] + parentWidget['w'] >= item.get('x') + item.get(
-                    'w') and \
-                    parentWidget['y'] <= item.get('y') and parentWidget['y'] + parentWidget['h'] >= item.get(
-                'y') + item.get('h'):
-                self.mainLogger.info('child node in notMatchedPair of the oldWidget:' + str(item.attrib))
-                return {'x': item.get('x'), 'y': item.get('y'), 'w': item.get('w'), 'h': item.get('h')}
-
-        return None
 
     def geneRepairedScript(self, testCase):
         for index, testStep in enumerate(testCase):
