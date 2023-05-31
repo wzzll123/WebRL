@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
+import pickle
 import time
 from functools import wraps
 
 success = True
 
-
 import time
 import requests
 import Levenshtein
 import ImageUtil
-from selenium.webdriver.firefox.webdriver import WebDriver
-from selenium.webdriver.common.action_chains import ActionChains
+
 from selenium import webdriver
 import time
 from PIL import Image
@@ -24,40 +23,29 @@ import htmlMatch
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 
+
 class RepairWeb():
     globalSuccessList = []
     globalFailList = []
-    globalTextUpdateList = []
 
     candidatesUpperBound = 5
 
-    def __init__(self, testCaseList, repairScriptPath, sBridge, webName, output,newUrl,enableHeuristic,
-                 chromeDriverPath,repairMode,speedMode):
-        # desired_caps['app'] = apkNewPath
-        # if appWaitActivity != '':
-        #   desired_caps['appWaitActivity'] = appWaitActivity
-
+    def __init__(self, testCaseList, repairScriptPath, sBridge, webName, output, newUrl, enableHeuristic,
+                 chromeDriverPath, repairMode, speedMode, theta_dom = 0.7, theta_image = 0.6):
         self.testCaseList = testCaseList
         self.repairedScript = repairScriptPath
         self.webName = webName
-        self.sBridge = sBridge
-        self.newUrl=newUrl
-        self.chromeDriverPath=chromeDriverPath
-        self.repairMode=repairMode
+        self.newUrl = newUrl
+        self.chromeDriverPath = chromeDriverPath
+        self.repairMode = repairMode
         self.sleepTime = 0
         self.enableHeuristic = enableHeuristic
-        self.repairedDB = output + webName + '/repaired.db'
-        self.isSureMatch = False
-        self.fixedDBName = fixedDBName = output + webName + '/' + 'fixedDB' + '.db'
-        self.globalTextUpdateList = {}
-        self.repair_detail = {'globalTextUpdateList': {}}
-        self.scaleRatio=1
-        self.checkPath = output + webName + '/' + 'xml/'
-        self.speedMode=speedMode
-
-        self.givenThreshold = 0.5
-
+        self.cachedDB = output + '/' + self.newUrl.replace('/', '-') + 'xpath2loc' + '.pkl'
+        self.scaleRatio = 1
+        self.speedMode = speedMode
         self.generatedScriptPath = output + webName + '/repaired.txt'
+        self.theta_dom = theta_dom
+        self.theta_image = theta_image
 
     def calculate_time(place=2):
         '''计算函数运行时间装饰器
@@ -78,6 +66,7 @@ class RepairWeb():
             return wrapper
 
         return decorator
+
     # 遍历待修复的test cases， 对每一个test case 尝试修复
     def repair(self):
         repairedScript = open(self.repairedScript, 'w')
@@ -99,8 +88,8 @@ class RepairWeb():
                 self.geneRepairedScript(self.testCaseList[indexTestCase])
 
         for i in self.testCaseList:
-            repairedScript.write("driver = webdriver.Chrome(\""+self.chromeDriverPath+"\")"+"\n"+
-                                 "driver.get(\""+self.newUrl+"\")"+"\n")
+            repairedScript.write("driver = webdriver.Chrome(\"" + self.chromeDriverPath + "\")" + "\n" +
+                                 "driver.get(\"" + self.newUrl + "\")" + "\n")
             for j in i:
                 if j['action'] != '' and j['action'] != '\n':
                     repairedScript.write(
@@ -169,182 +158,180 @@ class RepairWeb():
             notMatchedNewNodeAttrib = notMatchedNewNode.attrib
             notMatchedNewNodeAttrib['parent'] = ''
             repair_detail['globalTextUpdateList'][str(base_step['sIndex'])].append(notMatchedNewNodeAttrib)
-    def getMatchedLeafNodeByWidgetXpath(self,oldWidgetXpath,sureMatchedLeafNodePairList,possibleMatchLeafPair,notMatchedOldLeafNodeList,
-                                        notMatchedNewLeafNodeList,sureMatchedParentNodePairList):
+
+    def getMatchedLeafNodeByWidgetXpath(self, oldWidgetXpath, sureMatchedLeafNodePairList, possibleMatchLeafPair,
+                                        notMatchedOldLeafNodeList,
+                                        notMatchedNewLeafNodeList, sureMatchedParentNodePairList):
         for node in sureMatchedLeafNodePairList.keys():
-            if(node.attrs["xpath"]==oldWidgetXpath):
-                isLeaf=True
-                return isLeaf,node,"isSureMatch",sureMatchedLeafNodePairList[node]
+            if (node.attrs["xpath"] == oldWidgetXpath):
+                isLeaf = True
+                return isLeaf, node, "isSureMatch", sureMatchedLeafNodePairList[node]
         for node in sureMatchedParentNodePairList.keys():
-            if(node.attrs["xpath"]==oldWidgetXpath):
-                isLeaf=False
-                return isLeaf,node,"isSureMatch",sureMatchedParentNodePairList[node]
+            if (node.attrs["xpath"] == oldWidgetXpath):
+                isLeaf = False
+                return isLeaf, node, "isSureMatch", sureMatchedParentNodePairList[node]
 
         for node in possibleMatchLeafPair.keys():
-            if (node.attrs["xpath"]==oldWidgetXpath):
-                isLeaf=False
+            if (node.attrs["xpath"] == oldWidgetXpath):
+                isLeaf = False
                 matchedNodeList = possibleMatchLeafPair[node]
                 return isLeaf, node, 'isPossibleMatch', matchedNodeList
 
         for node in notMatchedOldLeafNodeList:
-            if (node.attrs["xpath"]==oldWidgetXpath):
+            if (node.attrs["xpath"] == oldWidgetXpath):
                 return True, node, 'noneMatch', notMatchedNewLeafNodeList
 
         return False, None, None, None
-    def getMatchedParentNodeByWidgetXpath(self,oldWidgetXpath,matchedParentNodePairList,possibleParentMatchPair, notMatchedNewNodeList):
+
+    def getMatchedParentNodeByWidgetXpath(self, oldWidgetXpath, matchedParentNodePairList, possibleParentMatchPair,
+                                          notMatchedNewNodeList):
         for node in matchedParentNodePairList.keys():
-            if (node.attrs["xpath"]==oldWidgetXpath):
+            if (node.attrs["xpath"] == oldWidgetXpath):
                 matchedNode = matchedParentNodePairList[node]
                 return True, node, 'isSureMatch', matchedNode
         for node in possibleParentMatchPair.keys():
-            if (node.attrs["xpath"]==oldWidgetXpath):
+            if (node.attrs["xpath"] == oldWidgetXpath):
                 matchedNodeList = possibleParentMatchPair[node]
                 return True, node, 'isPossibleMatch', matchedNodeList
 
         return True, None, 'noneMatch', notMatchedNewNodeList
-
-
-
-
-    # def obtain_candidate_this_time(self, base_step: dict,
-    #                                repair_step: dict,
-    #                                indexStep: int,
-    #                                base_image: str,
-    #                                current_image: str,
-    #                                base_xml: str,
-    #                                current_xml: str,
-    #                                repair_detail: dict,
-    #                                isConsiderParentNode: bool = True,
-    #                                isSureMatch: bool = True,
-    #                                isUsedCVModule: bool = True,
-    #                                testCaseList: dict = None) -> typing.Tuple[bool, bool, any, str, float]:
 
     # record xml to local
     def get_html_as_file(self, html, path):
         file = open(path, 'w')
         file.write(html)
         file.close()
+
     # 通过widget的xpath得到旧的HTML节点
-    def getHtmlNodeBypath(self,widgetXpath,oldHtml):
+    def getHtmlNodeBypath(self, widgetXpath, oldHtml):
         htmlProcess = htmlMatch.HtmlProcess()
-        rootSoup=htmlProcess.getRoot(oldHtml)
+        rootSoup = htmlProcess.getRoot(oldHtml)
         for child in rootSoup.descendants:
-            if(child.name!=None and child.attrs["xpath"]==widgetXpath):
+            if (child.name != None and child.attrs["xpath"] == widgetXpath):
                 return child
-    def getLevel1MatchDicInNewHtml(self,oldNode,allNode):
+
+    def getLevel1MatchDicInNewHtml(self, oldNode, allNode):
         matchDic = []
         for newNode in allNode:
             htmlProcess = htmlMatch.HtmlProcess()
-            tmp = htmlProcess.caculateDomNodeMatchDegreeFirst(oldNode,newNode)
+            tmp = htmlProcess.caculateDomNodeMatchDegreeFirst(oldNode, newNode)
             if (tmp > 0.7):
                 matchDic.append((newNode, tmp))
         return matchDic
-    def getLevel2MatchDicInNewHtml(self,oldNode,allNode):
+
+    def getLevel2MatchDicInNewHtml(self, oldNode, allNode):
         matchDic = []
         for newNode in allNode:
             htmlProcess = htmlMatch.HtmlProcess()
             width = self.driver.execute_script("return document.documentElement.scrollWidth")
             height = self.driver.execute_script("return document.documentElement.scrollHeight")
             tmp = htmlProcess.caculateDomNodeMatchDegreeLocation(oldNode, newNode, self.oldTestStep['widget'],
-                                                           width, height)
+                                                                 width, height)
             if (tmp > 0):
                 matchDic.append((newNode, tmp))
         return matchDic
-    def getColorMatchDicInNewHtml(self,oldNode,allNode):
+
+    def getColorMatchDicInNewHtml(self, oldNode, allNode):
         matchDic = []
         for newNode in allNode:
             htmlProcess = htmlMatch.HtmlProcess()
             width = self.driver.execute_script("return document.documentElement.scrollWidth")
             height = self.driver.execute_script("return document.documentElement.scrollHeight")
             tmp = htmlProcess.caculateColorNodeMatchDegree(oldNode, newNode, self.oldTestStep['widget'],
-                                                               self.base_image, self.current_image,
+                                                           self.base_image, self.current_image,
                                                            width, height)
             if (tmp > 0):
                 matchDic.append((newNode, tmp))
         return matchDic
-    def getDicInNewHtml(self,oldNode,newHtml,theta=0.8):
-        matchDic=[]
-        allLeafNode=[]
-        allNode=[]
+
+    def getDicInNewHtml(self, oldNode, newHtml, theta=0.8):
+        matchDic = []
+        allLeafNode = []
+        allNode = []
         htmlProcess = htmlMatch.HtmlProcess()
         rootSoup = htmlProcess.getRoot(newHtml)
         for child in rootSoup.html.descendants:
-            if(child.name!=None):
-                if(len(child.find_all(lambda x: x.name != '', recursive=False)) == 0):
+            if (child.name != None):
+                if (len(child.find_all(lambda x: x.name != '', recursive=False)) == 0):
                     allLeafNode.append(child)
                 allNode.append(child)
-                tmp=htmlProcess.caculateNodeMatchDegree(oldNode,child,theta)
-                if(tmp>0):
-                    matchDic.append((child,tmp))
-        return matchDic,allLeafNode,allNode,rootSoup
-    def getDicByAllAttrs(self,oldNode,newHtml):
-        DONT_USE_ATTRS=['xpath','class','classIndex']
-        matchDic=[]
-        allLeafNode=[]
-        allNode=[]
+                tmp = htmlProcess.caculateNodeMatchDegree(oldNode, child, theta)
+                if (tmp > 0):
+                    matchDic.append((child, tmp))
+        return matchDic, allLeafNode, allNode, rootSoup
+
+    def getDicByAllAttrs(self, oldNode, newHtml):
+        DONT_USE_ATTRS = ['xpath', 'class', 'classIndex']
+        matchDic = []
+        allLeafNode = []
+        allNode = []
         htmlProcess = htmlMatch.HtmlProcess()
         rootSoup = htmlProcess.getRoot(newHtml)
-        similarNodes2attrs={} #node has same attrs:attrsList
-        attr2times={} #属性出现的次数 如id:1
-        sureMatchNodesList=[]
+        similarNodes2attrs = {}  # node has same attrs:attrsList
+        attr2times = {}  # 属性出现的次数 如id:1
+        sureMatchNodesList = []
         possibleMatchNodesList = []
         for attrName in oldNode.attrs.keys():
-            if(attrName not in DONT_USE_ATTRS):
+            if (attrName not in DONT_USE_ATTRS):
                 attr2times[attrName] = 0
         attr2times['string'] = 0
         for child in rootSoup.html.descendants:
-            if(child.name!=None):
-                if(len(child.find_all(lambda x: x.name != '', recursive=False)) == 0):
+            if (child.name != None):
+                if (len(child.find_all(lambda x: x.name != '', recursive=False)) == 0):
                     allLeafNode.append(child)
                 allNode.append(child)
-                hasSameAttrs,sameAttrsList,stringSimilarity=htmlProcess.compareOldNewNode(oldNode,child)
-                if(hasSameAttrs):
-                    similarNodes2attrs[child]=sameAttrsList
+                hasSameAttrs, sameAttrsList, stringSimilarity = htmlProcess.compareOldNewNode(oldNode, child)
+                if (hasSameAttrs):
+                    similarNodes2attrs[child] = sameAttrsList
                     for attrName in sameAttrsList:
                         attr2times[attrName] += 1
         for similarNode in similarNodes2attrs:
             isSureMatch = False
             for attrName in similarNodes2attrs[similarNode]:
-                if(attr2times[attrName] == 1):
+                if (attr2times[attrName] == 1):
                     isSureMatch = True
                     sureMatchNodesList.append(similarNode)
                     break
-            if(isSureMatch == False):
+            if (isSureMatch == False):
                 possibleMatchNodesList.append(similarNode)
 
-        return sureMatchNodesList,possibleMatchNodesList,allLeafNode,allNode
+        return sureMatchNodesList, possibleMatchNodesList, allLeafNode, allNode
 
-    def getAllLeafNode(self,newHtml):
+    def getAllLeafNode(self, newHtml):
         htmlProcess = htmlMatch.HtmlProcess()
         rootSoup = htmlProcess.getRoot(newHtml)
         allNode = []
         for child in rootSoup.html.descendants:
-            if(child.name!=None):
+            if (child.name != None):
                 # if(self.speedMode is True):
                 #     #only leaf node
                 #     if(len(child.find_all(lambda x: x.name != '', recursive=False)) == 0):
                 #         allNode.append(child)
                 # else:
                 allNode.append(child)
-        return allNode,rootSoup
-    def get_full_screenshot_as_file(self,driver,path):
+        return allNode, rootSoup
+
+    def get_full_screenshot_as_file(self, driver, path):
         width = driver.execute_script("return document.documentElement.scrollWidth")
         height = driver.execute_script("return document.documentElement.scrollHeight")
-        width=1200
+        width = 1200
+        if 'espn' in self.newUrl:
+            width = 1600
         driver.set_window_size(width, height)
         driver.get_screenshot_as_file(path)
         img = Image.open(path)
-        return img.width/width
+        return img.width / width
 
     @calculate_time()
-    def assignNodeLocationMain(self,rootSoup,el,widgetLocation):
-        self.assignNodeLocationRec(rootSoup,el,widgetLocation)
-    def assignNodeLocationRec(self,rootSoup,el,widgetLocation):
+    def assignNodeLocationMain(self, rootSoup, el, widgetLocation):
+        self.assignNodeLocationRec(rootSoup, el, widgetLocation)
+
+    def assignNodeLocationRec(self, rootSoup, el, widgetLocation):
         location = el.location
         size = el.size
         if (size['width'] == 0 or size['height'] == 0):
             return
-        if(abs(location['y'] - widgetLocation['y']) > 600):
+        if (abs(location['y'] - widgetLocation['y']) > 600):
             return
         rootSoup.attrs['x'] = location['x']
         rootSoup.attrs['y'] = location['y']
@@ -352,18 +339,19 @@ class RepairWeb():
         rootSoup.attrs['h'] = size['height']
         self.allNodeRec.append(rootSoup)
         for child in rootSoup.children:
-            if(child.name is None):
+            if (child.name is None):
                 continue
             try:
-                if(child.name == 'svg'):
+                if (child.name == 'svg'):
                     el = el.find_element_by_xpath('//' + "*[name()='svg']")
                 else:
-                    el = el.find_element_by_xpath('//'+child.attrs["xpath"].split('/')[-1])
+                    el = el.find_element_by_xpath('//' + child.attrs["xpath"].split('/')[-1])
             except Exception as e:
                 # print(e)
                 continue
-            self.assignNodeLocationRec(child,el,widgetLocation)
-    def getNodeLocationByRoot(self,rootSoup,widgetLocation):
+            self.assignNodeLocationRec(child, el, widgetLocation)
+
+    def getNodeLocationByRoot(self, rootSoup, widgetLocation):
         # print(rootSoup.html.attrs['xpath'])
         el = self.driver.find_element_by_xpath(rootSoup.html.attrs['xpath'])
         self.allNodeRec = []
@@ -375,53 +363,79 @@ class RepairWeb():
                 self.allNodeRec.append(leafNode)
 
     @calculate_time()
-    def assignNodeLocation(self,allLeafNode):
+    def assignNodeLocation(self, allLeafNode):
         postProcessLeafNode = []
+        if os.path.exists(self.cachedDB):
+            with open(self.cachedDB, 'rb') as f:
+                xpath2loc = pickle.load(f)
+            for leafNode in allLeafNode:
+                if leafNode.attrs["xpath"] in xpath2loc:
+                    xpath = leafNode.attrs["xpath"]
+                    leafNode.attrs['x'] = xpath2loc[xpath]['x']
+                    leafNode.attrs['y'] = xpath2loc[xpath]['y']
+                    leafNode.attrs['w'] = xpath2loc[xpath]['width']
+                    leafNode.attrs['h'] = xpath2loc[xpath]['height']
+                    if leafNode.attrs['w'] == 0 or leafNode.attrs['h'] == 0:
+                        continue
+                    postProcessLeafNode.append(leafNode)
+            return postProcessLeafNode
+        # if cachedDB is not exists
+        xpath2loc = {}
         for leafNode in allLeafNode:
-            # if("class" in leafNode.attrs.keys() and leafNode.attrs['class'][0]=='header-navigation__search--icon'):
-            #     print(1)
             try:
-                el=self.driver.find_element_by_xpath(leafNode.attrs["xpath"])
+                el = self.driver.find_element_by_xpath(leafNode.attrs["xpath"])
                 location = el.location
                 size = el.size
             except:
                 continue
-            leafNode.attrs['x']=location['x']
-            leafNode.attrs['y']=location['y']
-            leafNode.attrs['w']=size['width']
-            leafNode.attrs['h']=size['height']
-            if( leafNode.attrs['w']==0 or leafNode.attrs['h']==0):
+            xpath2loc[leafNode.attrs["xpath"]] = {}
+            leafNode.attrs['x'] = xpath2loc[leafNode.attrs["xpath"]]['x'] = location['x']
+            leafNode.attrs['y'] = xpath2loc[leafNode.attrs["xpath"]]['y'] = location['y']
+            leafNode.attrs['w'] = xpath2loc[leafNode.attrs["xpath"]]['width'] = size['width']
+            leafNode.attrs['h'] = xpath2loc[leafNode.attrs["xpath"]]['height'] = size['height']
+            if leafNode.attrs['w'] == 0 or leafNode.attrs['h'] == 0:
                 continue
             postProcessLeafNode.append(leafNode)
+        # maybe have bugs
+        # TODO: only none match save the results
+        if len(allLeafNode) > 300:
+            with open(self.cachedDB, 'wb') as f:
+                pickle.dump(xpath2loc, f)
         return postProcessLeafNode
+
     @calculate_time()
-    def getCandidatesByCNN(self,widgetLocation,baseImagePath,currentImagePath,allLeafNode,theta=0.6):
+    def getCandidatesByCNN(self, widgetLocation, baseImagePath, currentImagePath, allLeafNode, theta):
         similarLeafNode = ImageUtil.ImageUtil.getSimilarLeafNodeByCNN(widgetLocation, baseImagePath, currentImagePath,
-                                                                   allLeafNode,theta)
+                                                                      allLeafNode, theta)
         rankedAllLeafNode = sorted(similarLeafNode, key=lambda t: t[1], reverse=True)
         return rankedAllLeafNode
-    def getMatchTypeByDic(self,matchDic):
+
+    def getMatchTypeByDic(self, matchDic):
         matchType = ""
         if (len(matchDic) == 0):
             matchType = "noneMatch"
-        elif(len(matchDic) == 1 or (matchDic[0][1] - matchDic[1][1]>0.5)):
+        elif (len(matchDic) == 1 or (matchDic[0][1] == 1 and matchDic[1][1] < 1) or (
+                matchDic[0][1] - matchDic[1][1] > 0.5)):
             matchType = "sureMatch"
         else:
             matchType = "possibleMatch"
         return matchType
-    def getWidgetType(self,widgetLocation,ImagePath):
+
+    def getWidgetType(self, widgetLocation, ImagePath):
         with open(ImagePath, 'rb') as f:
             data = f.read()
             baseImage = base64.b64encode(data)  # 得到 byte 编码的数据
-        all_text_block=ImageUtil.ImageUtil.getTextBlockByTecentAPI(baseImage)
+        all_text_block = ImageUtil.ImageUtil.getTextBlockByTecentAPI(baseImage)
         for text_block in all_text_block:
-            if(ImageUtil.ImageUtil.isPointInBox(text_block["x"]+text_block["w"]/2,text_block["y"]+text_block["h"]/2,widgetLocation)):
-                return "text",text_block["text"]
-        return "image",None
-    def getCandidateByTextBlock(self,allLeafNode,text_block):
-        candidateList=[]
+            if (ImageUtil.ImageUtil.isPointInBox(text_block["x"] + text_block["w"] / 2,
+                                                 text_block["y"] + text_block["h"] / 2, widgetLocation)):
+                return "text", text_block["text"]
+        return "image", None
+
+    def getCandidateByTextBlock(self, allLeafNode, text_block):
+        candidateList = []
         for leafNode in allLeafNode:
-            widgetLocation={
+            widgetLocation = {
                 'x': leafNode.attrs['x'],
                 'y': leafNode.attrs['y'],
                 'w': leafNode.attrs['w'],
@@ -432,40 +446,60 @@ class RepairWeb():
                 candidateList.append(leafNode)
         return candidateList
 
-    def filterNodeByLocation(self,allNode,widgetLocation):
-        result=[]
+    def filterNodeByLocation(self, allNode, widgetLocation):
+        result = []
         allNode = self.assignNodeLocation(allNode)
         for leafNode in allNode:
-            if(self.speedMode is False):
+            if self.speedMode is False:
                 result.append(leafNode)
             else:
                 # and abs(leafNode.attrs['y'] - widgetLocation['y']) < 500
-                if(0.6<abs(leafNode.attrs['h'] /widgetLocation['h']) < 1.8 and 0.6 < abs(leafNode.attrs['w'] / widgetLocation['w']) < 1.8
-                    and len(list(leafNode.descendants)) < 15):
+                if (0.6 < abs(leafNode.attrs['h'] / widgetLocation['h']) < 1.8 or 0.6 < abs(
+                        leafNode.attrs['w'] / widgetLocation['w']) < 1.8
+                        and len(list(leafNode.descendants)) < 15):
                     result.append(leafNode)
         return result
-    def perform_save_repair(self,candidate,oldTestStep):
-        print("candidate is:")
-        print(candidate)
+
+    def perform_save_repair(self, candidate, oldTestStep):
+        print("xpath of candidate is:")
+        print(candidate.attrs['xpath'])
         try:
             oldTestStep['targetNode'] = candidate
             el_repair = self.getSeleniumElement(candidate)
             self.performTestAction(oldTestStep, el_repair)
         except Exception as e:
             print(e)
-    def processImageElementSelenium(self,root,oldTestStep,base_image,current_image):
+
+    def processImageElementSelenium(self, root, oldTestStep, base_image, current_image):
         rankedAllLeafNode = ImageUtil.ImageUtil.getSimilarLeafNodeByCNNSelenium(oldTestStep['widget'], base_image,
-                                                                              current_image, root)
+                                                                                current_image, root)
         print("All possible match node:")
         print(rankedAllLeafNode[:(lambda x: 7 if x > 7 else x)(len(rankedAllLeafNode))])
         if (len(rankedAllLeafNode) > 0):
             candidate = rankedAllLeafNode[0][0]
-            self.perform_save_repair(candidate,oldTestStep)
-    def processImageElement(self,allNode,oldTestStep,base_image,current_image,theta=0.6):
+            self.perform_save_repair(candidate, oldTestStep)
+
+    def processImageElement(self, allNode, oldTestStep, base_image, current_image, theta):
         rankedAllLeafNode = self.getCandidatesByCNN(oldTestStep['widget'], base_image, current_image, allNode, theta)
-        if (len(rankedAllLeafNode) > 0):
+        if len(rankedAllLeafNode) > 0:
             candidate = rankedAllLeafNode[0][0]
-            self.perform_save_repair(candidate,oldTestStep)
+            self.perform_save_repair(candidate, oldTestStep)
+        return rankedAllLeafNode
+
+    def processImageElementPossible(self, allNode, oldTestStep, base_image, current_image, matchDic, theta,
+                                    para_text_image=3):
+        # combine text and image similarity
+        final_list = []
+        rankedAllLeafNode = self.getCandidatesByCNN(oldTestStep['widget'], base_image, current_image, allNode, theta)
+        for i in range(len(rankedAllLeafNode)):
+            node, image_similarity = rankedAllLeafNode[i]
+            for node_tmp, text_similarity in matchDic:
+                if node == node_tmp:
+                    final_list.append((node, text_similarity * para_text_image + image_similarity.item()))
+        final_list = sorted(final_list, key=lambda t: t[1], reverse=True)
+        if len(final_list) > 0:
+            candidate = final_list[0][0]
+            self.perform_save_repair(candidate, oldTestStep)
         return rankedAllLeafNode
 
     # 修复每个具体的test case
@@ -488,7 +522,7 @@ class RepairWeb():
             current_image = oldTestStep['screenshotPath']
             self.base_image = base_image
             self.current_image = current_image
-            print("test step:"+oldTestStep['handle'])
+            print("xpath of test step {}: {}".format(oldActionPointer, oldTestStep['xpath']))
             # sleep api
             if 'sleep(' in oldTestStep['handle']:
                 print(int(oldTestStep['handle'].strip().split('(')[1][0:-1]))
@@ -497,43 +531,41 @@ class RepairWeb():
                 continue
 
             # record layout & screenshot
-            self.scaleRatio=self.get_full_screenshot_as_file(self.driver,oldTestStep['screenshotPath'])
+            self.scaleRatio = self.get_full_screenshot_as_file(self.driver, oldTestStep['screenshotPath'])
             # self.driver.get_screenshot_as_file(oldTestStep['screenshotPath'])
             currentHtml = str(self.driver.page_source)
             self.get_html_as_file(currentHtml, oldTestStep['htmlPath'])
 
-
-            oldHtmlNode = self.getHtmlNodeBypath(oldTestStep["xpath"],oldTestStep['html'])
-            # print("oldHtmlNode:" + str(oldHtmlNode))
+            oldHtmlNode = self.getHtmlNodeBypath(oldTestStep["xpath"], oldTestStep['html'])
+            print("oldHtmlNode:" + str(oldHtmlNode))
             try:
                 el = RecordScreenAndWidght.RecordScreenAndWidget.getElementByRecordStep(self.driver, oldTestStep)
                 # self.performTestAction(oldTestStep, el)
-                oldActionPointer+=1
+                oldActionPointer += 1
                 continue
             except:
                 print("encounter a broken test step")
-                pass
-            if(self.repairMode=='CNN'):
+            if (self.repairMode == 'CNN'):
                 # allNode, rootSoup = self.getAllLeafNode(currentHtml)
                 # self.getNodeLocationByRoot(rootSoup,True,oldTestStep['widget'])
                 # print(len(self.allNodeRec))
-                allNode,_ = self.getAllLeafNode(currentHtml)
+                allNode, _ = self.getAllLeafNode(currentHtml)
                 allNode = self.filterNodeByLocation(allNode, oldTestStep['widget'])
 
                 self.processImageElement(allNode, oldTestStep, base_image, current_image)
                 oldActionPointer += 1
                 continue
-            if(self.repairMode=='COLOR'):
-                allNode,rootSoup = self.getAllLeafNode(currentHtml)
+            if (self.repairMode == 'COLOR'):
+                allNode, rootSoup = self.getAllLeafNode(currentHtml)
                 allNode = self.assignNodeLocation(allNode)
-                print(len(allNode))
-                matchDic=self.getColorMatchDicInNewHtml(oldHtmlNode,allNode)
-                matchDic=sorted(matchDic,key=lambda t: t[1],reverse=True)
-                print("All possible match node:")
-                print(matchDic[0:3])
+                # print(len(allNode))
+                matchDic = self.getColorMatchDicInNewHtml(oldHtmlNode, allNode)
+                matchDic = sorted(matchDic, key=lambda t: t[1], reverse=True)
+                # print("All possible match node:")
+                # print(matchDic[0:3])
                 candidate = matchDic[0][0]
-                print("candidate:")
-                print(candidate)
+                print("xpath of candidate is:")
+                print(candidate.attrs['xpath'])
                 try:
                     el_repair = self.getSeleniumElement(candidate)
                     self.performTestAction(oldTestStep, el_repair)
@@ -541,60 +573,82 @@ class RepairWeb():
                     print(e)
                 oldActionPointer += 1
                 continue
-            if(self.repairMode=='Hyb'):
-                matchDic, allLeafNode, allNode, rootSoup = self.getDicInNewHtml(oldHtmlNode, currentHtml, theta=0.8)
+            if (self.repairMode == 'Hyb'):
+                matchDic, allLeafNode, allNode, rootSoup = self.getDicInNewHtml(oldHtmlNode, currentHtml, theta=self.theta_dom)
                 # matchDic,allLeafNode,allNode=self.getDicInNewHtml(oldHtmlNode,currentHtml,theta=0.8)
-                matchDic=sorted(matchDic,key=lambda t: t[1],reverse=True)
-                matchType=self.getMatchTypeByDic(matchDic)
-                print("matchType:"+matchType)
-                if(matchType=="sureMatch"):
-                    candidate=matchDic[0][0]
-                    self.perform_save_repair(candidate,oldTestStep)
+                matchDic = sorted(matchDic, key=lambda t: t[1], reverse=True)
+                matchType = self.getMatchTypeByDic(matchDic)
+                print("matchType:" + matchType)
+                if (matchType == "sureMatch"):
+                    candidate = matchDic[0][0]
+                    print("candidate:")
+                    print(candidate)
+                    self.perform_save_repair(candidate, oldTestStep)
                     oldActionPointer += 1
                     continue
-                elif(matchType=="possibleMatch"):
-                    allCandidateNode=[]
+                elif (matchType == "possibleMatch"):
+                    # special cases: two candidates and one is child node of another
+                    # using tag name to decide
+                    # if(oldHtmlNode.name ==):
+                    #     candidate =
+                    #     self.perform_save_repair
+                    #     oldActionPointer += 1
+                    #     continue
+                    # print(matchDic)
+                    allCandidateNode = []
                     for candidateTurple in matchDic:
                         allCandidateNode.append(candidateTurple[0])
                     self.speedMode = False
-                    allCandidateNode=self.filterNodeByLocation(allCandidateNode,oldTestStep['widget'])
+                    allCandidateNode = self.filterNodeByLocation(allCandidateNode, oldTestStep['widget'])
                     self.speedMode = True
-                    rankedAllLeafNode = self.processImageElement(allCandidateNode,oldTestStep,base_image,current_image,
-                                                              theta=0)
+                    if len(allCandidateNode) == 0:
+                        candidate = matchDic[0][0]
+                        print("candidate:")
+                        print(candidate)
+                        self.perform_save_repair(candidate, oldTestStep)
+                        oldActionPointer += 1
+                        continue
+                    # rankedAllLeafNode = self.processImageElement(allCandidateNode, oldTestStep, base_image,
+                    #                                              current_image,
+                    #                                              theta=0)
+                    rankedAllLeafNode = self.processImageElementPossible(allCandidateNode, oldTestStep, base_image,
+                                                                         current_image, matchDic,
+                                                                         theta=self.theta_image)
                     oldActionPointer += 1
                     continue
-                elif(matchType=="noneMatch"):
-                    if (len(allNode) > 3500):
-                        self.getNodeLocationByRoot(rootSoup, oldTestStep['widget'])
-                        allNode = self.allNodeRec
-                    else:
-                        allNode = self.filterNodeByLocation(allNode, oldTestStep['widget'])
+                elif (matchType == "noneMatch"):
+                    # if (len(allNode) > 3500):
+                    #     self.getNodeLocationByRoot(rootSoup, oldTestStep['widget'])
+                    #     allNode = self.allNodeRec
+                    # else:
+                    allNode = self.filterNodeByLocation(allNode, oldTestStep['widget'])
                     # allNode=self.filterNodeByLocation(allNode,oldTestStep['widget'])
                     rankedAllLeafNode = self.getCandidatesByCNN(oldTestStep['widget'], base_image, current_image,
-                                                                allNode,theta=0.7)
-                    if (len(rankedAllLeafNode) > 0):
+                                                                allNode, theta=0.7)
+                    if len(rankedAllLeafNode) > 0:
                         candidate = rankedAllLeafNode[0][0]
-                        self.perform_save_repair(candidate,oldTestStep)
+                        self.perform_save_repair(candidate, oldTestStep)
                     else:
                         allNode = self.filterNodeByLocation(allNode, oldTestStep['widget'])
                         matchDic = self.getLevel2MatchDicInNewHtml(oldHtmlNode, allNode)
                         matchDic = sorted(matchDic, key=lambda t: t[1], reverse=True)
                         candidate = matchDic[0][0]
-                        self.perform_save_repair(candidate,oldTestStep)
+                        self.perform_save_repair(candidate, oldTestStep)
                     oldActionPointer += 1
                     continue
         self.driver.quit()
         return isRepairedThisTest
-    def exploration(self,oldHtmlNode,allLeafNode):
-        #获得所有的leaf node
-        #一一点击、与旧节点匹配 如果有sure match，return
-        #如果所处url改变、driver.back
-        executeList=[]
-        currentUrl=self.driver.current_url
-        x=0
-        y=0
+
+    def exploration(self, oldHtmlNode, allLeafNode):
+        # 获得所有的leaf node
+        # 一一点击、与旧节点匹配 如果有sure match，return
+        # 如果所处url改变、driver.back
+        executeList = []
+        currentUrl = self.driver.current_url
+        x = 0
+        y = 0
         for leafNode in allLeafNode:
-            if(leafNode.string=="Health Conditions"):
+            if (leafNode.string == "Health Conditions"):
                 print(leafNode)
                 try:
                     executeList.clear()
@@ -602,38 +656,34 @@ class RepairWeb():
                     # if(leafNode.name=="a"):
                     #     continue
                     el_repair = self.getSeleniumElement(leafNode)
-                    location=el_repair.location
+                    location = el_repair.location
                     ActionChains(self.driver).move_by_offset(-x, -y).perform()
-                    x=location["x"]+1
-                    y=location["y"]+1
+                    x = location["x"] + 1
+                    y = location["y"] + 1
                     ActionChains(self.driver).move_by_offset(x, y).click().perform()
                     time.sleep(1)
                     # el_repair.click()
                     currentHtml = str(self.driver.page_source)
-                    matchDic, allLeafNode,allNode, _= self.getDicInNewHtml(oldHtmlNode, currentHtml)
+                    matchDic, allLeafNode, allNode, _ = self.getDicInNewHtml(oldHtmlNode, currentHtml)
                     matchDic = sorted(matchDic, key=lambda t: t[1], reverse=True)
-                    matchType=self.getMatchTypeByDic(matchDic)
+                    matchType = self.getMatchTypeByDic(matchDic)
                     if (matchType == "sureMatch"):
                         executeList.append(matchDic[0][0])
-                    if(currentUrl==self.driver.current_url):
+                    if (currentUrl == self.driver.current_url):
                         self.driver.refresh()
                     else:
                         self.driver.back()
-                    if(len(executeList)==2):
+                    if (len(executeList) == 2):
                         break
                 except Exception as e:
                     continue
         return executeList
+
     def writeToFile(self, file, str):
         import io
         outputFile = io.open(file, mode='w', encoding='utf-8')
         outputFile.write(str.decode('utf-8'))
         outputFile.close()
-
-
-
-
-
 
     # 触发具体的测试动作
     @calculate_time()
@@ -653,14 +703,10 @@ class RepairWeb():
         elif "driver.back()" in testStep['handle'] and testStep['handle'][0] != "#":
             self.driver.back()
 
-
-
-
-
     # 获得本次测试工作的匹配控件
-    def getSeleniumElement(self,targetNode):
-        if("id" in targetNode.attrs):
-            el_repair=self.driver.find_element_by_id(targetNode.attrs["id"])
+    def getSeleniumElement(self, targetNode):
+        if ("id" in targetNode.attrs):
+            el_repair = self.driver.find_element_by_id(targetNode.attrs["id"])
             return el_repair
         if (targetNode.string != None and targetNode.name == 'a'):
             el_repair = self.driver.find_element_by_link_text(targetNode.string)
@@ -668,13 +714,13 @@ class RepairWeb():
         if ("xpath" in targetNode.attrs):
             el_repair = self.driver.find_element_by_xpath(targetNode.attrs['xpath'])
             return el_repair
-        if("class" in targetNode.attrs):
-            el_repair=self.driver.find_elements_by_class_name(targetNode.attrs["class"][0])[targetNode.attrs["classIndex"][targetNode.attrs["class"][0]]]
+        if ("class" in targetNode.attrs):
+            el_repair = self.driver.find_elements_by_class_name(targetNode.attrs["class"][0])[
+                targetNode.attrs["classIndex"][targetNode.attrs["class"][0]]]
             return el_repair
 
         self.mainLogger.info("error in get Handle")
         exit(-1)
-
 
     def geneRepairedScript(self, testCase):
         for index, testStep in enumerate(testCase):
@@ -688,16 +734,16 @@ class RepairWeb():
             if ("id" in targetNode.attrs):
                 testStep['handle'] = 'el = driver.find_element_by_id("' + targetNode[
                     'id'] + '")'
-            elif('xpath' in targetNode.attrs):
+            elif ('xpath' in targetNode.attrs):
                 testStep['handle'] = 'el = driver.find_element_by_xpath("' + targetNode[
                     'xpath'] + '")'
             elif ("class" in targetNode.attrs):
                 testStep['handle'] = ('el = driver.find_elements_by_class("' + targetNode.attrs["class"][0]
-                + '")"[' + str(targetNode.attrs["classIndex"][targetNode.attrs["class"][0]]) + ']')
+                                      + '")"[' + str(
+                            targetNode.attrs["classIndex"][targetNode.attrs["class"][0]]) + ']')
             elif (targetNode.string != None):
                 testStep['handle'] = 'el = driver.find_element_by_link_text("' + targetNode.string + '")'
 
             else:
                 self.mainLogger.info("error in get Handle")
                 pass
-
