@@ -8,7 +8,7 @@ el = driver.find_element_by_xpath("/html[1]/body[1]/div[2]/div[1]/div[1]/header[
 el = driver.find_element_by_xpath("/html[1]/body[1]/div[2]/div[1]/div[1]/header[1]/div[4]/ul[1]/li[2]")
 el = driver.find_element_by_xpath("/html[1]/body[1]/div[2]/div[1]/div[1]/header[1]/div[4]/ul[1]/li[11]")
 el = driver.find_element_by_xpath("/html[1]/body[1]/div[2]/div[1]/div[1]/header[1]/div[4]/ul[1]/li[16]")
-el = driver.find_element_by_xpath("/html[1]/body[1]/div[2]/div[1]/div[1]/header[1]/section[1]/div[1]/button[1]")
+el = driver.find_element_by_id("desktop-sections-button")
 el = driver.find_element_by_xpath("/html[1]/body[1]/div[2]/div[1]/div[1]/header[1]/div[4]/ul[1]/li[5]")
 el = driver.find_element_by_xpath("/html[1]/body[1]/div[2]/div[1]/div[1]/header[1]/div[4]/ul[1]/li[8]")
 el = driver.find_element_by_xpath("/html[1]/body[1]/div[2]/div[1]/div[1]/header[1]/div[4]/ul[1]/li[13]")
@@ -25,3 +25,4 @@ el = driver.find_element_by_xpath("/html[1]/body[1]/div[2]/div[1]/div[1]/header[
 el = driver.find_element_by_xpath("/html[1]/body[1]/div[2]/div[1]/div[1]/header[1]/section[2]/div[4]/a[1]")
 el = driver.find_element_by_xpath("/html[1]/body[1]/div[2]/div[1]/div[1]/header[1]/div[4]/ul[1]/li[4]")
 el = driver.find_element_by_xpath("/html[1]/body[1]/div[2]/div[1]/div[1]/header[1]/div[4]/ul[1]/li[9]")
+el = driver.find_element_by_xpath("/html[1]/body[1]/div[2]/nav[1]/div[1]/div[2]/div[1]/div[1]/ul[1]/li[1]/a[1]/*[local-name() = 'svg'][1]")
