@@ -4,12 +4,6 @@ import json
 from datetime import datetime
 import cv2
 import numpy as np
-from tencentcloud.common import credential
-from tencentcloud.common.exception.tencent_cloud_sdk_exception import TencentCloudSDKException
-from tencentcloud.common.profile.client_profile import ClientProfile
-from tencentcloud.common.profile.http_profile import HttpProfile
-import tencentcloud.ocr.v20181119
-from tencentcloud.ocr.v20181119 import ocr_client
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -18,6 +12,7 @@ import torch.backends.cudnn as cudnn
 import numpy as np
 import torchvision
 from torchvision import datasets, models, transforms
+import timm
 import time
 import os
 import copy
@@ -28,6 +23,16 @@ class ImageUtil(object):
     API_URL = 'https://westcentralus.api.cognitive.microsoft.com/vision/v1.0/ocr'
     timeCostForOCR = 0
     isRerun = False
+
+    # model = timm.create_model(
+    #     'lcnet_050.ra2_in1k',
+    #     # 'hf_hub:timm/lcnet_075.ra2_in1k',
+    #     pretrained=True,
+    #     num_classes=0,  # remove classifier nn.Linear
+    # )
+    model = models.shufflenet_v2_x0_5(pretrained=True)
+    model.eval()
+    model.fc = nn.Sequential()
 
     def __init__(self, image_content):
         # print image_path
@@ -123,7 +128,7 @@ class ImageUtil(object):
             params = {
                 "ImageBase64": self.image_content
             }
-            params = json.dumps(params,cls=MyEncoder)
+            params = json.dumps(params, cls=MyEncoder)
             req.from_json_string(params)
 
             resp = client.GeneralBasicOCR(req)
@@ -156,11 +161,10 @@ class ImageUtil(object):
             returnList.append(lineList['words'][0:])
         return returnList
 
-
     @staticmethod
     def getTextBlockByTecentAPI(baseImage):
         imageUtil = ImageUtil(baseImage)
-        _json =imageUtil.get_text_information()
+        _json = imageUtil.get_text_information()
         all_text_block = []
         for wordItem in _json:
             if wordItem.Confidence < 80 or wordItem.ItemPolygon.Y < 50:
@@ -525,7 +529,7 @@ class ImageUtil(object):
         return similar
 
     @staticmethod
-    def getSurf(imagePath1,imagePath2,widgetLocation):
+    def getSurf(imagePath1, imagePath2, widgetLocation):
         img1 = cv2.imread(imagePath1, cv2.IMREAD_GRAYSCALE)  # queryImage
         img2 = cv2.imread(imagePath2, cv2.IMREAD_GRAYSCALE)  # trainImage
         surf = cv2.xfeatures2d.SURF_create(400)
@@ -538,10 +542,11 @@ class ImageUtil(object):
         bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
         # Match descriptors.
         matches = bf.match(des1, des2)
-        points=ImageUtil.filterMatchByLocation(matches,kp1,kp2,widgetLocation)
+        points = ImageUtil.filterMatchByLocation(matches, kp1, kp2, widgetLocation)
         return points
+
     @staticmethod
-    def isPointInBox(x,y,widgetLocation):
+    def isPointInBox(x, y, widgetLocation):
         if (y > widgetLocation['y'] and y < widgetLocation['y'] + widgetLocation['h'] and x > widgetLocation[
             'x'] and x < widgetLocation['x'] + widgetLocation['w']):
             return True
@@ -549,14 +554,16 @@ class ImageUtil(object):
             return False
 
     @staticmethod
-    def filterMatchByLocation(matches,kp1,kp2,widgetLocation):
-        points=[]
+    def filterMatchByLocation(matches, kp1, kp2, widgetLocation):
+        points = []
         for match in matches:
-            x=kp1[match.queryIdx].pt[0]
-            y=kp1[match.queryIdx].pt[1]
-            if(y > widgetLocation['y'] and y < widgetLocation['y'] + widgetLocation['h'] and x > widgetLocation['x'] and x < widgetLocation['x'] + widgetLocation['w']):
+            x = kp1[match.queryIdx].pt[0]
+            y = kp1[match.queryIdx].pt[1]
+            if (y > widgetLocation['y'] and y < widgetLocation['y'] + widgetLocation['h'] and x > widgetLocation[
+                'x'] and x < widgetLocation['x'] + widgetLocation['w']):
                 points.append(kp2[match.queryIdx].pt)
         return points
+
     @staticmethod
     def getSiftBase64(image1, image2, initBox, sift_ratio):
         nparr1 = np.fromstring(image1, np.uint8)
@@ -598,20 +605,21 @@ class ImageUtil(object):
         # img3 = cv2.drawMatchesKnn(img1_gray,kp1,img2_gray,kp2,good[:10],flag=2)
 
         return similar
+
     @staticmethod
-    def getSimilarLeafNodeByCNNSelenium(widgetLocation,oldVersionImgPath,newVerSionImgPath,rootNode):
+    def getSimilarLeafNodeByCNNSelenium(widgetLocation, oldVersionImgPath, newVerSionImgPath, rootNode):
         oldImg = ImageUtil.openCropImg(oldVersionImgPath, widgetLocation)
         isLong = False
         if (widgetLocation['w'] / widgetLocation['h'] > 4 or widgetLocation['h'] / widgetLocation['w'] > 4):
             isLong = True
         oldImgFeature = ImageUtil.imgToFeatureTensor(oldImg, isLong)
         rankedAllLeafNode = []
-        ImageUtil.dfsSeleniumNode(rootNode,newVerSionImgPath,isLong,rankedAllLeafNode,oldImgFeature,widgetLocation)
+        ImageUtil.dfsSeleniumNode(rootNode, newVerSionImgPath, isLong, rankedAllLeafNode, oldImgFeature, widgetLocation)
         sorted(rankedAllLeafNode, key=lambda t: t[1], reverse=True)
         return rankedAllLeafNode
 
     @staticmethod
-    def dfsSeleniumNode(root,newVerSionImgPath,isLong,rankedAllLeafNode,oldImgFeature,widgetLocation):
+    def dfsSeleniumNode(root, newVerSionImgPath, isLong, rankedAllLeafNode, oldImgFeature, widgetLocation):
         # from collections import namedtuple
         # soupLike = namedtuple('soupLike', ['attrs'])
         for el in root.find_elements_by_xpath('./child::*'):
@@ -628,82 +636,70 @@ class ImageUtil(object):
             leafNode['h'] = size['height']
             if ((size['width'] != 0 and size['height'] != 0) and
                     (abs(leafNode['h'] - widgetLocation['h']) < 60 or abs(
-                                        leafNode['w'] - widgetLocation['w']) < 60) ):
+                        leafNode['w'] - widgetLocation['w']) < 60)):
                 newImg = ImageUtil.openCropImg(newVerSionImgPath, leafNode)
                 newImgFeature = ImageUtil.imgToFeatureTensor(newImg, isLong)
                 similarity = torch.cosine_similarity(oldImgFeature, newImgFeature)
                 if (similarity[0] > 0.5):
                     rankedAllLeafNode.append((el, similarity[0]))
-            ImageUtil.dfsSeleniumNode(el,newVerSionImgPath,isLong,rankedAllLeafNode,oldImgFeature,widgetLocation)
+            ImageUtil.dfsSeleniumNode(el, newVerSionImgPath, isLong, rankedAllLeafNode, oldImgFeature, widgetLocation)
+
     @staticmethod
-    def getSimilarLeafNodeByCNN(widgetLocation,oldVersionImgPath,newVerSionImgPath,allLeafNode,theta):
+    def getSimilarLeafNodeByCNN(widgetLocation, oldVersionImgPath, newVerSionImgPath, allLeafNode, theta):
         rankedAllLeafNode = []
         oldImg = ImageUtil.openCropImg(oldVersionImgPath, widgetLocation)
-        oldImg.save("old.png")
+        # oldImg.save("old.png")
         isLong = False
-        if(widgetLocation['w']/widgetLocation['h']>4 or widgetLocation['h']/widgetLocation['w']>4):
+        if (widgetLocation['w'] / widgetLocation['h'] > 4 or widgetLocation['h'] / widgetLocation['w'] > 4):
             isLong = True
 
-        oldImgFeature = ImageUtil.imgToFeatureTensor(oldImg,isLong)
+        oldImgFeature = ImageUtil.imgToFeatureTensor(oldImg, isLong)
         from PIL import Image
         newAllImg = Image.open(newVerSionImgPath)
 
         for leafNode in allLeafNode:
-            #abs(leafNode.attrs['h']-widgetLocation['h'])<100 or abs(leafNode.attrs['w']-widgetLocation['w'])<100 or
+            # abs(leafNode.attrs['h']-widgetLocation['h'])<100 or abs(leafNode.attrs['w']-widgetLocation['w'])<100 or
             # if(abs(leafNode.attrs['h']-widgetLocation['h'])<100 or abs(leafNode.attrs['w']-widgetLocation['w'])<100 or 0.7*widgetLocation['h']
             # <leafNode.attrs['h']<1.3*widgetLocation['h'] or 0.7*widgetLocation['w']<leafNode.attrs['w']<1.3*widgetLocation['w']):
             # newImg = ImageUtil.openCropImg(newVerSionImgPath, leafNode)
             edge = 0
             newImg = newAllImg.crop((leafNode['x'] - edge, leafNode['y'] - edge,
-                            leafNode['x'] + leafNode['w'] + 2 * edge
-                            , leafNode['y'] + leafNode['h'] + 2 * edge))
+                                     leafNode['x'] + leafNode['w'] + 2 * edge
+                                     , leafNode['y'] + leafNode['h'] + 2 * edge))
             newImg = newImg.convert('RGB')
-            newImgFeature = ImageUtil.imgToFeatureTensor(newImg,isLong)
-            similarity=torch.cosine_similarity(oldImgFeature,newImgFeature)
-            if(similarity[0]>theta):
-                rankedAllLeafNode.append((leafNode,similarity[0]))
+            newImgFeature = ImageUtil.imgToFeatureTensor(newImg, isLong)
+            similarity = torch.cosine_similarity(oldImgFeature, newImgFeature)
+            if (similarity[0] > theta):
+                rankedAllLeafNode.append((leafNode, similarity[0]))
             # else:
             #     continue
         sorted(rankedAllLeafNode, key=lambda t: t[1], reverse=True)
         return rankedAllLeafNode
 
     @staticmethod
-    def openCropImg(imgPath,widgetLocation):
+    def openCropImg(imgPath, widgetLocation):
         from PIL import Image
-        img=Image.open(imgPath)
-        edge=0
-        img=img.crop((widgetLocation['x']-edge,widgetLocation['y']-edge,widgetLocation['x']+widgetLocation['w']+2*edge
-                            ,widgetLocation['y']+widgetLocation['h']+2*edge))
+        img = Image.open(imgPath)
+        edge = 0
+        img = img.crop((widgetLocation['x'] - edge, widgetLocation['y'] - edge,
+                        widgetLocation['x'] + widgetLocation['w'] + 2 * edge
+                        , widgetLocation['y'] + widgetLocation['h'] + 2 * edge))
         img = img.convert('RGB')
         return img
 
     @staticmethod
-    def imgToFeatureTensor(img,isLong):
-        if(isLong):
-            return ImageUtil.imgToFeatureTensorLong(img)
-        else:
-            return ImageUtil.imgToFeatureTensorNotLong(img)
+    def imgToFeatureTensor(img, isLong):
+        return ImageUtil.imgToFeatureTensorTrim(img)
+        # if(isLong):
+        #     return ImageUtil.imgToFeatureTensorLong(img)
+        # else:
+        #     return ImageUtil.imgToFeatureTensorNotLong(img)
 
     @staticmethod
-    def imgToFeatureTensorNotLong(img):
+    def imgToFeatureTensorTrim(img):
         dataTransfroms = transforms.Compose([
-            # transforms.Resize([32, 32]),
-            #
+            # transforms.Resize(256, interpolation=transforms.InterpolationMode.BILINEAR),
             transforms.Resize(256),
-            transforms.CenterCrop(250),
-            transforms.Grayscale(3),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ])
-        imgTensor=dataTransfroms(img)
-        imgFeature=ImageUtil.getConvOutput(imgTensor.unsqueeze(0))
-        return imgFeature
-
-    @staticmethod
-    def imgToFeatureTensorLong(img):
-        dataTransfroms = transforms.Compose([
-            transforms.Resize([32, 32]),
-            transforms.Grayscale(3),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
@@ -712,13 +708,42 @@ class ImageUtil(object):
         return imgFeature
 
     @staticmethod
-    def getSimilarityByCNN(oldVersionImgPath,newVerSionImgPath,widgetLocation,leafNode):
-        similarity=0
-        oldImg=ImageUtil.openCropImg(oldVersionImgPath,widgetLocation)
-        newImg=ImageUtil.openCropImg(newVerSionImgPath,leafNode)
-        oldImgFeature=ImageUtil.imgToFeatureTensor(oldImg)
-        newImgFeature=ImageUtil.imgToFeatureTensor(newImg)
-        return torch.cosine_similarity(oldImgFeature,newImgFeature)
+    def imgToFeatureTensorNotLong(img):
+        dataTransfroms = transforms.Compose([
+            # transforms.Resize([32, 32]),
+            #
+            transforms.Resize(256),
+            # transforms.CenterCrop(250),
+            # transforms.Grayscale(3),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ])
+        imgTensor = dataTransfroms(img)
+        imgFeature = ImageUtil.getConvOutput(imgTensor.unsqueeze(0))
+        return imgFeature
+
+    @staticmethod
+    def imgToFeatureTensorLong(img):
+        dataTransfroms = transforms.Compose([
+            # transforms.Resize([32, 32]),
+            transforms.Resize(256),
+            # transforms.Grayscale(3),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ])
+        imgTensor = dataTransfroms(img)
+        imgFeature = ImageUtil.getConvOutput(imgTensor.unsqueeze(0))
+        return imgFeature
+
+    @staticmethod
+    def getSimilarityByCNN(oldVersionImgPath, newVerSionImgPath, widgetLocation, leafNode):
+        similarity = 0
+        oldImg = ImageUtil.openCropImg(oldVersionImgPath, widgetLocation)
+        newImg = ImageUtil.openCropImg(newVerSionImgPath, leafNode)
+        oldImgFeature = ImageUtil.imgToFeatureTensor(oldImg)
+        newImgFeature = ImageUtil.imgToFeatureTensor(newImg)
+        return torch.cosine_similarity(oldImgFeature, newImgFeature)
+
     @staticmethod
     def getConvOutput(imgTensor):
         # model = models.squeezenet1_1(pretrained=True)
@@ -727,34 +752,35 @@ class ImageUtil(object):
         # model = models.mobilenet_v3_large(pretrained=True)
         # model.eval()
         # model.fc=nn.Sequential()
-        model=models.shufflenet_v2_x0_5(pretrained=True)
-        model.eval()
-        model.fc=nn.Sequential()
         # model = models.shufflenet_v2_x1_0(pretrained=True)
         # model.eval()
         # model.fc=nn.Sequential()
 
 
+
         with torch.no_grad():
-            imgTensor=model(imgTensor)
+            imgTensor = ImageUtil.model(imgTensor)
         return imgTensor
+
     @staticmethod
-    def rankLeafNodeBySift(widgetLocation,oldVersionImg,newVerSionImg,allLeafNode):
+    def rankLeafNodeBySift(widgetLocation, oldVersionImg, newVerSionImg, allLeafNode):
         oldVersionImg = base64.b64decode(oldVersionImg)
         newVerSionImg = base64.b64decode(newVerSionImg)
         similarPoints = ImageUtil.getSiftBase64(oldVersionImg, newVerSionImg, widgetLocation, sift_ratio=0.8)
-        rankedAllLeafNode=[]
+        rankedAllLeafNode = []
         for leafNode in allLeafNode:
             # leafNodeEntry:(leafNode,siftSum)
-            sum=0
+            sum = 0
             for (x, y) in similarPoints:
-                if(y > leafNode.attrs['y'] and y < leafNode.attrs['y'] + leafNode.attrs['h'] and x > leafNode.attrs['x'] and x < leafNode.attrs[
+                if (y > leafNode.attrs['y'] and y < leafNode.attrs['y'] + leafNode.attrs['h'] and x > leafNode.attrs[
+                    'x'] and x < leafNode.attrs[
                     'x'] + leafNode.attrs['w']):
                     sum = sum + 1
-            if(sum>0):
-                rankedAllLeafNode.append((leafNode,sum * 1.0 / leafNode.attrs['h'] / leafNode.attrs['w']))
+            if (sum > 0):
+                rankedAllLeafNode.append((leafNode, sum * 1.0 / leafNode.attrs['h'] / leafNode.attrs['w']))
         sorted(rankedAllLeafNode, key=lambda t: t[1], reverse=True)
         return rankedAllLeafNode
+
     @staticmethod
     def rankNoneTextCandidateByCVTextMatchBySift(similarPoints, candidates):
 

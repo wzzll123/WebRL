@@ -64,8 +64,12 @@ class TestCaseParse(object):
                         htmlPathInit = self.outputPath + app + str(iList - 1) + "/" + str(opr) + ".html"
                         htmlPath = self.outputPath + app + str(iList - 1) + "_/" + str(opr) + ".html"
                         htmlPathNext = self.outputPath + app + str(iList - 1) + "/" + str(opr + 1) + ".html"
-
-                    testAction = {'handle': i.strip('\n'), 'action': self.fileLines[index + 1],
+                    action = ''
+                    if(index+1 < len(self.fileLines)):
+                        if ('click' in self.fileLines[index + 1] or 'send_keys' in self.fileLines[index + 1] or
+                                'clear' in self.fileLines[index + 1]):
+                            action = self.fileLines[index + 1]
+                    testAction = {'handle': i.strip('\n'), 'action': action,
                                   'widget': {}, 'screenshotPathInit': screenshotPathInit,
                                   'isHeuristic': 0,
                                   'screenshotPathNext': screenshotPathNext,

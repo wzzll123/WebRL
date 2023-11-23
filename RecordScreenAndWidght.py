@@ -1,8 +1,5 @@
 # coding:utf-8
 
-
-from selenium.webdriver.firefox.webdriver import WebDriver
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 import time
@@ -44,6 +41,18 @@ class RecordScreenAndWidget(object):
                 # TODO#
                 assert False
             el = driver.find_element_by_id(tempContent2[2:-2])
+        elif 'find_element_by_name' in testStep['handle'] and testStep['handle'][0] != '#':
+            # 按id查找元素
+            tempContent1 = testStep['handle'].strip()  # 去除两侧空白
+            tempList1 = tempContent1.split('_name')  # 以'_id'为界进行分割
+            if len(tempList1) < 2:
+                # TODO#
+                assert False
+            tempContent2 = tempList1[1]
+            if len(tempContent2) < 5:  # ("") 长度为4
+                # TODO#
+                assert False
+            el = driver.find_element_by_name(tempContent2[2:-2])
         elif 'find_element_by_accessibility_id' in testStep['handle'] and testStep['handle'][0] != '#':
             # 按accessibility找元素
             tempContent1 = testStep['handle'].strip()  # 去除两侧空白
@@ -265,6 +274,7 @@ class RecordScreenAndWidget(object):
                     testStep['widget'] = widget
                     widgetXpath=xpathProcess.generateXpathFromSeleniumElement(el,"")
                     testStep["xpath"]=widgetXpath
+                    assert widget['w'] > 0 and widget['h'] > 0, 'The size of widget should not be 0'
                     print('record test element x,y,w,h: {},{},{},{}'.format(widget['x'], widget['y'], widget['w'],
                                                                             widget['h']))
                     print ('record test element xpath: {}'.format(widgetXpath))
@@ -290,9 +300,6 @@ class RecordScreenAndWidget(object):
                     # f_out.write("try:\n\ttime.sleep(1)\n\tdriver.hide_keyboard()\nexcept:\n\tprint" + '"' + "dddd" + '"' + "\n")
                     # f_out.write("time.sleep(1)\n")
 
-                elif "TouchAction(driver)" in testStep['action'] and testStep['action'][0] != "#":
-                    time.sleep(1)
-                    TouchAction(driver).long_press(el).wait(10000).perform()
 
                 # todo driver.tap
                 if "driver.tap" in testStep['handle'] and testStep['handle'][0] != "#":
@@ -321,6 +328,9 @@ class RecordScreenAndWidget(object):
         width = driver.execute_script("return document.documentElement.scrollWidth")
         height = driver.execute_script("return document.documentElement.scrollHeight")
         width=1200
+
+        if 'espn' in self.url:
+            width=1600
         driver.set_window_size(width, height)
         # time.sleep(1)
         driver.get_screenshot_as_file(path)

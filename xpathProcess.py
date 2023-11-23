@@ -1,9 +1,7 @@
 # encoding=utf-8
 import time
 
-from dill.pointers import children
-from selenium import webdriver
-from bs4 import BeautifulSoup
+
 def generateXpathFromSeleniumElement(el,currentXpathString):
     childTag=el.tag_name
     if(childTag=="html"):

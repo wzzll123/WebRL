@@ -10,6 +10,7 @@ import ImageUtil
 
 logger = logging.getLogger("meter")
 from bs4 import BeautifulSoup
+
 try:
     import xml.etree.cElementTree as ET
 except ImportError:
@@ -25,7 +26,8 @@ class HtmlProcess:
 
         self.childNodeRes = []
         self.parentNodeRes = []
-        self.NonBodyTag=["script","style","meta","link"]
+        self.NonBodyTag = ["script", "style", "meta", "link"]
+
     def definePopWindowType(self, xml, screen_w, screen_h):
         root = self.getRoot(xml)
         while 'bounds' not in root.attrib:
@@ -123,7 +125,7 @@ class HtmlProcess:
         # xmlFile = xmlFile.replace("#", "")
         soup = BeautifulSoup(htmlFile)  # <class 'xml.etree.ElementTree.ElementTree'>
         # 获取根节点 <Element 'data' at 0x02BF6A80>
-        #去除script、style等标签
+        # 去除script、style等标签
         for NotBodyTag in self.NonBodyTag:
             for NonBodyElement in soup.findAll(NotBodyTag):
                 NonBodyElement.extract()
@@ -132,7 +134,7 @@ class HtmlProcess:
         # 将每个节点class的index添加到属性中
         self.denoteCurrentHtmlIndex(soup)
         self.initIDDic()
-        #add string to attrb
+        # add string to attrb
         return soup
 
     def getUIElementsList(self, xmlFile):
@@ -175,14 +177,14 @@ class HtmlProcess:
     # 对xml进行重写，把默认xml的index重写为脚本中的索引index ，保存在本地的字典里
     def denoteCurrentHtmlIndex(self, root):
         if "class" in root.attrs:
-            if("classIndex" not in root.attrs.keys()):
-                root.attrs['classIndex']={}
+            if ("classIndex" not in root.attrs.keys()):
+                root.attrs['classIndex'] = {}
             for className in root.attrs['class']:
                 if className not in list(self.classDic.keys()):
                     self.classDic[className] = 1
                 else:
                     self.classDic[className] = self.classDic[className] + 1
-                root.attrs['classIndex'][className]= self.classDic[className] - 1
+                root.attrs['classIndex'][className] = self.classDic[className] - 1
 
             # if 'id' in root.attrib :
             #     if root.attrib['id'] not in list(self.idDic.keys()):
@@ -192,13 +194,13 @@ class HtmlProcess:
             #     root.set('idIndex', self.idDic[root.attrib['id']] - 1)
         # print root.attrib
         for child in root.children:
-            if(child.name!=None):
+            if (child.name != None):
                 self.denoteCurrentHtmlIndex(child)
 
     def getChildNodeList(self, root):
         hasChild = False
         for child in root.children:
-            if(child.name!=None):
+            if (child.name != None):
                 hasChild = True
                 self.getChildNodeList(child)
 
@@ -206,6 +208,7 @@ class HtmlProcess:
             self.childNodeRes.append(root)
             # avoid the case that listview contains no child widget, but denoted as a child widget.
             # listTypeList = ['android.widget.ListView', 'android.support.v7.widget.RecyclerView', 'android.view.View',
+
     #             #                 'android.widget.GridView']
     #             # if root.get('class') not in listTypeList:
     #             #     if (root.get('w') >= 30 and root.get('h') >= 30) or root.get('text') != '':
@@ -217,7 +220,7 @@ class HtmlProcess:
     def getParentNodeList(self, root):
         hasChild = False
         for child in root.children:
-            if(child.name!=None):
+            if (child.name != None):
                 hasChild = True
                 self.getParentNodeList(child)
         if hasChild:
@@ -347,7 +350,7 @@ class HtmlProcess:
                 # filter widgets more likely to be a candidate
                 if node.get('h') * 1.0 / node.get('w') > 0.1 and (
                         'image' in node.get('class').lower() or node.get('text') != '' or node.get(
-                        'resource-id') != '' or node.get('content-desc') != ''):
+                    'resource-id') != '' or node.get('content-desc') != ''):
                     notMatchedNewNodeList.append(node)
 
         return res, possibleMatchPair, notMatchedOldNodeList, notMatchedNewNodeList, subingMatchedParentNodePairs
@@ -648,16 +651,17 @@ class HtmlProcess:
                 matchedNum + possibleMatchedNumOldNode + notMatchedOldNodeListNum)
 
         return matchScoreForOldNode, matchScoreForOldNodeIsSureLevelMatch
-    def compareOldNewNode(self,oldNode,newNode):
+
+    def compareOldNewNode(self, oldNode, newNode):
         DONT_USE_ATTRS = ['xpath', 'class']
         hasSameAttrs = False
-        sameAttrs=[]
+        sameAttrs = []
         for attrName in oldNode.attrs:
-            if(attrName in newNode.attrs and oldNode.attrs[attrName]==newNode.attrs[attrName]):
-                if(attrName not in DONT_USE_ATTRS):
+            if (attrName in newNode.attrs and oldNode.attrs[attrName] == newNode.attrs[attrName]):
+                if (attrName not in DONT_USE_ATTRS):
                     hasSameAttrs = True
                     sameAttrs.append(attrName)
-        #string similarity
+        # string similarity
         if (oldNode.string is None and oldNode.text == ''):
             string1 = ''
         elif (oldNode.string is None and oldNode.text != ''):
@@ -673,15 +677,17 @@ class HtmlProcess:
             similarity = Levenshtein.jaro_winkler(string1, string2)
             if (similarity > 0.9):
                 stringValue = similarity
-        if(stringValue != 0):
+        if (stringValue != 0):
             hasSameAttrs = True
             sameAttrs.append('string')
-        return hasSameAttrs,sameAttrs,stringValue
-    def colorLevSimi(self,str1,str2):
-        return 1 - Levenshtein.distance(str1,str2)/max(len(str1),len(str2))
-    def caculateDomNodeMatchDegreeLocation(self,oldNode,newNode,widgetLocation,screenWidth,
-                                     screenHeight):
-        attrlist = [ 'h', 'w', 'x', 'y']
+        return hasSameAttrs, sameAttrs, stringValue
+
+    def colorLevSimi(self, str1, str2):
+        return 1 - Levenshtein.distance(str1, str2) / max(len(str1), len(str2))
+
+    def caculateDomNodeMatchDegreeLocation(self, oldNode, newNode, widgetLocation, screenWidth,
+                                           screenHeight):
+        attrlist = ['h', 'w', 'x', 'y']
         attr2value = {}
         attr2weight = {}
         locationAttrlistWidth = ['x', 'w']
@@ -691,23 +697,24 @@ class HtmlProcess:
             attr2value[attr] = 0
             attr2weight[attr] = weightlist[i]
         for attr in locationAttrlistWidth:
-            attr2value[attr] = 1 - abs(widgetLocation[attr] - newNode.attrs[attr])/screenWidth
+            attr2value[attr] = 1 - abs(widgetLocation[attr] - newNode.attrs[attr]) / screenWidth
         for attr in locationAttrlistHeight:
-            attr2value[attr] = 1 - abs(widgetLocation[attr] - newNode.attrs[attr])/screenHeight
-        #xpath
+            attr2value[attr] = 1 - abs(widgetLocation[attr] - newNode.attrs[attr]) / screenHeight
+        # xpath
         # attr2value['xpath'] = Levenshtein.jaro_winkler(oldNode.attrs['xpath'], newNode.attrs['xpath'])
         similarity = 0
         for attr in attrlist:
             similarity += attr2weight[attr] * attr2value[attr]
         return similarity
-    def caculateDomNodeMatchDegreeFirst(self,oldNode,newNode):
+
+    def caculateDomNodeMatchDegreeFirst(self, oldNode, newNode):
         attr2weight = {}
         attr2value = {}
-        attrlist = ['id', 'class', 'name', 'value', 'alt', 'src', 'href','onclick','linktext', 'title',
+        attrlist = ['id', 'class', 'name', 'value', 'alt', 'src', 'href', 'onclick', 'linktext', 'title',
                     'placeholder', 'aria-label']
-        attrInAttrSouplist = ['id', 'name', 'value', 'type', 'alt', 'src', 'href', 'onclick','title',
-            'placeholder', 'aria-label']
-        otherslist = [ 'linktext', 'label', 'image']
+        attrInAttrSouplist = ['id', 'name', 'value', 'type', 'alt', 'src', 'href', 'onclick', 'title',
+                              'placeholder', 'aria-label']
+        otherslist = ['linktext', 'label', 'image']
         # weightlist = [0.86, 0.35, 0.80, 0.61, 0.44, 0.21, 0.57, 0.62, 0.62, 0.26, 0.66, 0.33, 0.66, 0.72, 0.60, 0.65,
         #               0.76, 0.31, 0.12]
         weightlist = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -742,7 +749,7 @@ class HtmlProcess:
                                                                        len(newNode.attrs['class']) != 0)):
             oldClassStr = ''.join(oldNode.attrs['class'])
             newClassStr = ''.join(newNode.attrs['class'])
-            if(oldClassStr == newClassStr):
+            if (oldClassStr == newClassStr):
                 attr2value['class'] = 1
 
         similarity = 0
@@ -750,129 +757,124 @@ class HtmlProcess:
             similarity += attr2value[attr]
         return similarity
 
-    def caculateColorNodeMatchDegree(self,oldNode,newNode,widgetLocation,base_image,current_image,screenWidth,
+    def caculateColorNodeMatchDegree(self, oldNode, newNode, widgetLocation, base_image, current_image, screenWidth,
                                      screenHeight):
         attr2weight = {}
         attr2value = {}
-        attrlist = ['id','class','name','value','type','tagName','alt','src','href','size','onclick','h','w'
-                    ,'xpath','x','y','linktext','label','image']
-        attrInAttrSouplist=['id','name','value','type','alt','src','href','onclick'
-                    ,'xpath']
+        attrlist = ['id', 'class', 'name', 'value', 'type', 'tagName', 'alt', 'src', 'href', 'size', 'onclick', 'h', 'w'
+            , 'xpath', 'x', 'y', 'linktext', 'label', 'image']
+        attrInAttrSouplist = ['id', 'name', 'value', 'type', 'alt', 'src', 'href', 'onclick'
+            , 'xpath']
         locationAttrlistWidth = ['x', 'w']
-        locationAttrlistHeight = ['y','h']
-        otherslist=['tagName','size','linktext','label','image','class']
+        locationAttrlistHeight = ['y', 'h']
+        otherslist = ['tagName', 'size', 'linktext', 'label', 'image', 'class']
         # weightlist = [0.86, 0.35, 0.80, 0.61, 0.44, 0.21, 0.57, 0.62, 0.62, 0.26, 0.66, 0.33, 0.66, 0.72, 0.60, 0.65,
         #               0.76, 0.31, 0.12]
         weightlist = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                       1, 1, 1]
-        for i,attr in enumerate(attrlist):
+        for i, attr in enumerate(attrlist):
             attr2value[attr] = 0
             attr2weight[attr] = weightlist[i]
         for attr in locationAttrlistWidth:
-            attr2value[attr] = 1 - abs(widgetLocation[attr] - newNode.attrs[attr])/screenWidth
+            attr2value[attr] = 1 - abs(widgetLocation[attr] - newNode.attrs[attr]) / screenWidth
         for attr in locationAttrlistHeight:
-            attr2value[attr] = 1 - abs(widgetLocation[attr] - newNode.attrs[attr])/screenHeight
+            attr2value[attr] = 1 - abs(widgetLocation[attr] - newNode.attrs[attr]) / screenHeight
         for attr in attrInAttrSouplist:
-            if (attr in oldNode.attrs and attr in newNode.attrs and max(len(oldNode.attrs[attr]),len(newNode.attrs[attr])!=0)):
+            if (attr in oldNode.attrs and attr in newNode.attrs and max(len(oldNode.attrs[attr]),
+                                                                        len(newNode.attrs[attr]) != 0)):
                 attr2value[attr] = self.colorLevSimi(oldNode.attrs[attr], newNode.attrs[attr])
-        #tagname
-        if(oldNode.name == newNode.name):
+        # tagname
+        if (oldNode.name == newNode.name):
             attr2value['tagName'] = 1
-        #linktext
-        if(oldNode.string is not None and newNode.string is not None):
+        # linktext
+        if (oldNode.string is not None and newNode.string is not None):
             attr2value['linktext'] = self.colorLevSimi(oldNode.string, newNode.string)
-        #image
+        # image
         # oldImg = ImageUtil.ImageUtil.openCropImg(base_image,widgetLocation)
         # newImg = ImageUtil.ImageUtil.openCropImg(current_image,newNode)
         # if(oldImg==newImg):
         #     attr2value['image'] = 1
-        #size
-        if(oldNode.name == 'input' and newNode.name == 'input'):
-            if('size' in oldNode.attrs and 'size' in newNode.attrs and oldNode.attrs["size"] == newNode.attrs["size"]):
+        # size
+        if (oldNode.name == 'input' and newNode.name == 'input'):
+            if ('size' in oldNode.attrs and 'size' in newNode.attrs and oldNode.attrs["size"] == newNode.attrs["size"]):
                 attr2value['size'] = 1
 
-
-        #class
-        if('class' in oldNode.attrs and 'class' in newNode.attrs and (len(oldNode.attrs['class'])!=0 or
-        len(newNode.attrs['class'])!=0)):
+        # class
+        if ('class' in oldNode.attrs and 'class' in newNode.attrs and (len(oldNode.attrs['class']) != 0 or
+                                                                       len(newNode.attrs['class']) != 0)):
             oldClassStr = ''.join(oldNode.attrs['class'])
             newClassStr = ''.join(newNode.attrs['class'])
             attr2value['class'] = self.colorLevSimi(oldClassStr, newClassStr)
-        #label
+        # label
         oldlabel = None
         newlabel = None
-        if(oldNode.name == 'input' and newNode.name == 'input'):
+        if (oldNode.name == 'input' and newNode.name == 'input'):
             for label in oldNode.parent.find_all('label'):
-                if('id' in newNode.attrs and label.attrs['for'] == oldNode.attrs['id']):
+                if 'id' in oldNode.attrs and 'id' in newNode.attrs and label.attrs['for'] == oldNode.attrs['id']:
                     oldlabel = label.string
             for label in newNode.parent.find_all('label'):
-                if('id' in newNode.attrs and label.attrs['for'] == newNode.attrs['id']):
+                if 'id' in oldNode.attrs and 'id' in newNode.attrs and label.attrs['for'] == newNode.attrs['id']:
                     newlabel = label.string
-            if(oldlabel is not None and newlabel is not None):
+            if oldlabel is not None and newlabel is not None:
                 print('label is not None')
                 attr2value['label'] = self.colorLevSimi(oldlabel, newlabel)
 
-        similarity=0
+        similarity = 0
         for attr in attrlist:
             similarity += attr2weight[attr] * attr2value[attr]
         return similarity
 
-
-
-    def caculateNodeMatchDegree(self,oldNode,newNode,theta=0.8):
-        idValue=0
-        titleValue=0
+    def caculateNodeMatchDegree(self, oldNode, newNode, theta=0.8):
+        idValue = 0
+        titleValue = 0
         altValue = 0
-        stringValue=0
-        nameValue=0
-        placeholderValue=0
-        valueValue=0
-        arialabelValue=0
-        typeValue=0
-        classValue=0
+        stringValue = 0
+        nameValue = 0
+        placeholderValue = 0
+        valueValue = 0
+        arialabelValue = 0
+        typeValue = 0
+        classValue = 0
         textValue = 0
-        textAttr = {'value':0, 'type':0, 'title':0, 'alt':0, 'aria-label':0, 'placeholder':0}
-        if('id' in oldNode.attrs and 'id' in newNode.attrs and oldNode.attrs["id"]==newNode.attrs["id"]):
-            idValue=1
+        textAttr = {'value': 0, 'type': 0, 'title': 0, 'alt': 0, 'aria-label': 0, 'placeholder': 0}
+        if ('id' in oldNode.attrs and 'id' in newNode.attrs and oldNode.attrs["id"] == newNode.attrs["id"]):
+            idValue = 1
         if ('name' in oldNode.attrs and 'name' in newNode.attrs and oldNode.attrs["name"] == newNode.attrs["name"]):
             nameValue = 1
 
         for attr in textAttr:
-            if(attr in oldNode.attrs and attr in newNode.attrs):
+            if (attr in oldNode.attrs and attr in newNode.attrs):
                 similarity = Levenshtein.ratio(oldNode.attrs[attr], newNode.attrs[attr])
-                if(similarity > theta):
+                if (similarity > theta):
                     textValue += similarity
 
+        # if(oldNode.string is None and oldNode.text == ''):
+        #     string1=''
+        # elif (oldNode.string is None and oldNode.text != ''):
+        #     string1=oldNode.text.strip()
+        # else:
+        #     string1 = oldNode.string.strip()
+        # if(string1=='' or newNode.string is None ):
+        #     stringValue=0
+        # else:
+        #     string1=string1.lower()
+        #     string2=newNode.string.strip().lower()
+        #     similarity = Levenshtein.ratio(string1, string2)
+        #     if(similarity>theta):
+        #         stringValue=similarity
+
+        string1 = oldNode.text.strip().lower()
+        string2 = newNode.text.strip().lower()
 
 
-        # if('title' in oldNode.attrs and 'title' in newNode.attrs and oldNode.attrs["title"]==newNode.attrs["title"]):
-        #     titleValue=1
-        # if('alt' in oldNode.attrs and 'alt' in newNode.attrs and oldNode.attrs["alt"]==newNode.attrs["alt"]):
-        #     altValue=1
-        #
-        # if ('placeholder' in oldNode.attrs and 'placeholder' in newNode.attrs and oldNode.attrs["placeholder"] == newNode.attrs["placeholder"]):
-        #     placeholderValue = 1
-        # if ('aria-label' in oldNode.attrs and 'aria-label' in newNode.attrs and oldNode.attrs["aria-label"] == newNode.attrs["aria-label"]):
-        #     arialabelValue = 1
-        # if ('value' in oldNode.attrs and 'value' in newNode.attrs and oldNode.attrs["value"] == newNode.attrs["value"]):
-        #     valueValue = 1
-        if(oldNode.string is None and oldNode.text == ''):
-            string1=''
-        elif (oldNode.string is None and oldNode.text != ''):
-            string1=oldNode.text.strip()
-        else:
-            string1 = oldNode.string.strip()
-        if(string1=='' or newNode.string is None ):
-            stringValue=0
-        else:
-            string1=string1.lower()
-            string2=newNode.string.strip().lower()
-            similarity = Levenshtein.ratio(string1, string2)
-            if(similarity>theta):
-                stringValue=similarity
-        return idValue+stringValue+nameValue+textValue
+        similarity = Levenshtein.jaro_winkler(string1, string2)
+        if string1 == '' or string2 == '':
+            similarity = 0
+        if similarity > theta:
+            stringValue = similarity
+        return idValue + stringValue + nameValue + textValue
 
-    def preprocess(self,sentence):
+    def preprocess(self, sentence):
         return [w for w in sentence.lower().split() if w not in self.stop_words]
 
     # def wordMoverDistance(self,string1,string2):
@@ -880,49 +882,52 @@ class HtmlProcess:
     #     string2=self.preprocess(string2)
     #     distance = self.model.wmdistance(string1,string2)
     #     return 1/1+distance
-    def jaccard(self,string1,string2):
-        set1=set(string1)
-        set2=set(string2)
-        return len(set1&set2)/len(set1|set2)
-    def editDistance(self,string1,string2):
+    def jaccard(self, string1, string2):
+        set1 = set(string1)
+        set2 = set(string2)
+        return len(set1 & set2) / len(set1 | set2)
+
+    def editDistance(self, string1, string2):
         if (len(string1) == 0):
             return len(string2)
         if (len(string2) == 0):
             return len(string1)
-        dp=[[] for i in range(len(string1)+1)]
+        dp = [[] for i in range(len(string1) + 1)]
         for firstDimension in dp:
-            for i in range(len(string2)+1):
+            for i in range(len(string2) + 1):
                 firstDimension.append(0)
-        for i in range(len(string1)+1):
-            dp[i][0]=i
-        for i in range(len(string2)+1):
-            dp[0][i]=i
+        for i in range(len(string1) + 1):
+            dp[i][0] = i
+        for i in range(len(string2) + 1):
+            dp[0][i] = i
         for i in range(len(string1)):
             for j in range(len(string2)):
-                if(string1[i]==string2[j]):
-                    dp[i+1][j+1]=dp[i][j]
+                if (string1[i] == string2[j]):
+                    dp[i + 1][j + 1] = dp[i][j]
                 else:
-                    dp[i+1][j+1]=min(dp[i][j]+1,dp[i+1][j]+1,dp[i][j+1]+1)
-        return 1-dp[len(string1)][len(string2)]/max(len(string1),len(string2))
+                    dp[i + 1][j + 1] = min(dp[i][j] + 1, dp[i + 1][j] + 1, dp[i][j + 1] + 1)
+        return 1 - dp[len(string1)][len(string2)] / max(len(string1), len(string2))
 
-    def isHtmlNodeMatched(self,oldNode,newNode):
-        idSame = 'id' in oldNode.attrs and 'id' in newNode.attrs and oldNode.attrs["id"]==newNode.attrs["id"]
-        titleSame= 'title' in oldNode.attrs and 'title' in newNode.attrs and oldNode.attrs["title"]==newNode.attrs["title"]
-        stringSame=oldNode.string!=None and newNode.string!=None and oldNode.string==newNode.string
-        altSame = 'alt' in oldNode.attrs and 'alt' in newNode.attrs and oldNode.attrs["alt"]==newNode.attrs["alt"]
+    def isHtmlNodeMatched(self, oldNode, newNode):
+        idSame = 'id' in oldNode.attrs and 'id' in newNode.attrs and oldNode.attrs["id"] == newNode.attrs["id"]
+        titleSame = 'title' in oldNode.attrs and 'title' in newNode.attrs and oldNode.attrs["title"] == newNode.attrs[
+            "title"]
+        stringSame = oldNode.string != None and newNode.string != None and oldNode.string == newNode.string
+        altSame = 'alt' in oldNode.attrs and 'alt' in newNode.attrs and oldNode.attrs["alt"] == newNode.attrs["alt"]
 
-        Rule_IsSure =idSame or titleSame or stringSame or altSame
+        Rule_IsSure = idSame or titleSame or stringSame or altSame
         if Rule_IsSure:
             return True
         return False
-    def matchHtmlNodePair(self,oldNodeList, newNodeList):
+
+    def matchHtmlNodePair(self, oldNodeList, newNodeList):
 
         # todo descript,text,id, with their index;  scrollable,etc
 
-        matchDict={}
-        matchNewNodeList=[]
+        matchDict = {}
+        matchNewNodeList = []
         for oldNode in oldNodeList:
-            matchDict[oldNode]=[]
+            matchDict[oldNode] = []
             sureMatchedNum = 0  # 相似的节点数目
             for newNode in newNodeList:
                 if self.isHtmlNodeMatched(oldNode, newNode):  # 根据xml中的几个参数进行匹配
@@ -930,19 +935,19 @@ class HtmlProcess:
                     matchNewNodeList.append(newNode)
                     # sureMatchedNum = sureMatchedNum + 1
                     # sureMatchCandidateNode = newNode
-        possibleMatchedNodePair={}
-        notMatchedNewNodeList=[]
-        notMatchedOldNodeList=[]
-        sureMatchedNodePairList={}
+        possibleMatchedNodePair = {}
+        notMatchedNewNodeList = []
+        notMatchedOldNodeList = []
+        sureMatchedNodePairList = {}
         for oldNode in matchDict.keys():
-            if(len(matchDict[oldNode])==1):
-                sureMatchedNodePairList[oldNode]=matchDict[oldNode][0]
-            elif(len(matchDict[oldNode])==0):
+            if (len(matchDict[oldNode]) == 1):
+                sureMatchedNodePairList[oldNode] = matchDict[oldNode][0]
+            elif (len(matchDict[oldNode]) == 0):
                 notMatchedNewNodeList.append(oldNode)
             else:
-                possibleMatchedNodePair[oldNode]=matchDict[oldNode]
+                possibleMatchedNodePair[oldNode] = matchDict[oldNode]
         for newNode in newNodeList:
-            if(newNode not in matchNewNodeList):
+            if (newNode not in matchNewNodeList):
                 notMatchedNewNodeList.append(newNode)
         return sureMatchedNodePairList, possibleMatchedNodePair, notMatchedOldNodeList, notMatchedNewNodeList
 
@@ -989,21 +994,23 @@ class HtmlProcess:
         #     oldChildNodeList, newChildNodeList, oldChild2ParentDic, newChild2ParentDic)
         sureMatchedLeafNodePairList, possibleMatchedleafNodePair, notMatchedOldLeafNodeList, notMatchedNewleafNodeList = self.matchHtmlNodePair(
             oldChildNodeList, newChildNodeList)
-        #print(sureMatchedLeafNodePairList)
+        # print(sureMatchedLeafNodePairList)
         isMatchedTwoChildList = False
 
         # set threshold aroad to isSureMatch
         scoreTheshrold = givenThreshold if not isSureMatch else givenThreshold - 0.1
         # 基于控件匹配的比例定义xml间的匹配计算比例然后和设定的阈值进行比较
-        scoreMappingBig, scoreMappingIsSureMatch = self.scoreTwoNode(sureMatchedLeafNodePairList, possibleMatchedleafNodePair,
-                                                                     notMatchedOldLeafNodeList, notMatchedNewleafNodeList)
+        scoreMappingBig, scoreMappingIsSureMatch = self.scoreTwoNode(sureMatchedLeafNodePairList,
+                                                                     possibleMatchedleafNodePair,
+                                                                     notMatchedOldLeafNodeList,
+                                                                     notMatchedNewleafNodeList)
 
         if scoreMappingBig >= scoreTheshrold:
             isMatchedTwoChildList = True
 
         # 计算父节点间的匹配关系
         matchedParentNodePairList, possibleParentMatchPair, _, _ = self.matchHtmlNodePair(oldParentNodeList,
-                                                                                         newParentNodeList)
+                                                                                          newParentNodeList)
 
         return isMatchedTwoChildList, sureMatchedLeafNodePairList, matchedParentNodePairList, possibleMatchedleafNodePair, possibleParentMatchPair, notMatchedOldLeafNodeList, notMatchedNewleafNodeList, scoreMappingBig
 
@@ -1132,6 +1139,7 @@ class HtmlProcess:
             else:
                 res.append(node.get('parent'))
         return res
+
     # 返回和和新节点有覆盖关系的节点集合 shouldMatchedNewNodeList 以及新旧节点的最恰当的子节点的匹配对 res
     def denoteSublingNodeAsSureMatch(self, oldNode, sureMatchCandidateNode, oldChild2ParentDic, newChild2ParentDic,
                                      newChildNodeList, subingMatchedParentNodePairs):

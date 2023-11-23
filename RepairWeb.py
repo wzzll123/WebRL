@@ -5,8 +5,6 @@ from functools import wraps
 
 success = True
 
-import time
-import requests
 import Levenshtein
 import ImageUtil
 
@@ -552,7 +550,7 @@ class RepairWeb():
                 allNode, _ = self.getAllLeafNode(currentHtml)
                 allNode = self.filterNodeByLocation(allNode, oldTestStep['widget'])
 
-                self.processImageElement(allNode, oldTestStep, base_image, current_image)
+                self.processImageElement(allNode, oldTestStep, base_image, current_image,0)
                 oldActionPointer += 1
                 continue
             if (self.repairMode == 'COLOR'):
@@ -613,7 +611,7 @@ class RepairWeb():
                     #                                              theta=0)
                     rankedAllLeafNode = self.processImageElementPossible(allCandidateNode, oldTestStep, base_image,
                                                                          current_image, matchDic,
-                                                                         theta=self.theta_image)
+                                                                         theta=0)
                     oldActionPointer += 1
                     continue
                 elif (matchType == "noneMatch"):
@@ -624,7 +622,7 @@ class RepairWeb():
                     allNode = self.filterNodeByLocation(allNode, oldTestStep['widget'])
                     # allNode=self.filterNodeByLocation(allNode,oldTestStep['widget'])
                     rankedAllLeafNode = self.getCandidatesByCNN(oldTestStep['widget'], base_image, current_image,
-                                                                allNode, theta=0.7)
+                                                                allNode, theta=self.theta_image)
                     if len(rankedAllLeafNode) > 0:
                         candidate = rankedAllLeafNode[0][0]
                         self.perform_save_repair(candidate, oldTestStep)
