@@ -29,7 +29,7 @@ class RepairWeb():
     candidatesUpperBound = 5
 
     def __init__(self, testCaseList, repairScriptPath, sBridge, webName, output, newUrl, enableHeuristic,
-                 chromeDriverPath, repairMode, speedMode, theta_dom = 0.7, theta_image = 0.6):
+                 chromeDriverPath, repairMode, speedMode, theta_dom=0.7, theta_image=0.6, theta_combine=3):
         self.testCaseList = testCaseList
         self.repairedScript = repairScriptPath
         self.webName = webName
@@ -44,6 +44,7 @@ class RepairWeb():
         self.generatedScriptPath = output + webName + '/repaired.txt'
         self.theta_dom = theta_dom
         self.theta_image = theta_image
+        self.theta_combine = theta_combine
 
     def calculate_time(place=2):
         '''计算函数运行时间装饰器
@@ -249,13 +250,14 @@ class RepairWeb():
         htmlProcess = htmlMatch.HtmlProcess()
         rootSoup = htmlProcess.getRoot(newHtml)
         for child in rootSoup.html.descendants:
-            if (child.name != None):
-                if (len(child.find_all(lambda x: x.name != '', recursive=False)) == 0):
-                    allLeafNode.append(child)
-                allNode.append(child)
-                tmp = htmlProcess.caculateNodeMatchDegree(oldNode, child, theta)
-                if (tmp > 0):
-                    matchDic.append((child, tmp))
+            if child.name is None or child.name in ['head', 'title', 'body']:
+                continue
+            if len(child.find_all(lambda x: x.name != '', recursive=False)) == 0:
+                allLeafNode.append(child)
+            allNode.append(child)
+            tmp = htmlProcess.caculateNodeMatchDegree(oldNode, child, theta)
+            if tmp > 0:
+                matchDic.append((child, tmp))
         return matchDic, allLeafNode, allNode, rootSoup
 
     def getDicByAllAttrs(self, oldNode, newHtml):
@@ -410,11 +412,23 @@ class RepairWeb():
 
     def getMatchTypeByDic(self, matchDic):
         matchType = ""
-        if (len(matchDic) == 0):
+        if len(matchDic) == 0:
             matchType = "noneMatch"
-        elif (len(matchDic) == 1 or (matchDic[0][1] == 1 and matchDic[1][1] < 1) or (
-                matchDic[0][1] - matchDic[1][1] > 0.5)):
-            matchType = "sureMatch"
+        elif len(matchDic) == 1 or (matchDic[0][1] - matchDic[1][1] > 0.5):
+        # elif len(matchDic) == 1:
+            return "sureMatch"
+        elif matchDic[0][1] >= 1:
+            # todo: not just 1, maybe 2,3,4
+            for i in range(len(matchDic)):
+                if matchDic[i][1] < 1:
+                    del matchDic[i:]
+                    break
+            matchDic = sorted(matchDic, key=lambda t: len(t[0]['xpath']), reverse=True)
+            for item in matchDic:
+                if item[0]['xpath'] not in matchDic[0][0]['xpath']:
+                    return "possibleMatch"
+            return "sureMatch"
+
         else:
             matchType = "possibleMatch"
         return matchType
@@ -550,7 +564,7 @@ class RepairWeb():
                 allNode, _ = self.getAllLeafNode(currentHtml)
                 allNode = self.filterNodeByLocation(allNode, oldTestStep['widget'])
 
-                self.processImageElement(allNode, oldTestStep, base_image, current_image,0)
+                self.processImageElement(allNode, oldTestStep, base_image, current_image, 0)
                 oldActionPointer += 1
                 continue
             if (self.repairMode == 'COLOR'):
@@ -572,7 +586,8 @@ class RepairWeb():
                 oldActionPointer += 1
                 continue
             if (self.repairMode == 'Hyb'):
-                matchDic, allLeafNode, allNode, rootSoup = self.getDicInNewHtml(oldHtmlNode, currentHtml, theta=self.theta_dom)
+                matchDic, allLeafNode, allNode, rootSoup = self.getDicInNewHtml(oldHtmlNode, currentHtml,
+                                                                                theta=self.theta_dom)
                 # matchDic,allLeafNode,allNode=self.getDicInNewHtml(oldHtmlNode,currentHtml,theta=0.8)
                 matchDic = sorted(matchDic, key=lambda t: t[1], reverse=True)
                 matchType = self.getMatchTypeByDic(matchDic)
@@ -611,7 +626,7 @@ class RepairWeb():
                     #                                              theta=0)
                     rankedAllLeafNode = self.processImageElementPossible(allCandidateNode, oldTestStep, base_image,
                                                                          current_image, matchDic,
-                                                                         theta=0)
+                                                                         theta=0, para_text_image=self.theta_combine)
                     oldActionPointer += 1
                     continue
                 elif (matchType == "noneMatch"):
@@ -627,6 +642,7 @@ class RepairWeb():
                         candidate = rankedAllLeafNode[0][0]
                         self.perform_save_repair(candidate, oldTestStep)
                     else:
+                        print("fall back")
                         allNode = self.filterNodeByLocation(allNode, oldTestStep['widget'])
                         matchDic = self.getLevel2MatchDicInNewHtml(oldHtmlNode, allNode)
                         matchDic = sorted(matchDic, key=lambda t: t[1], reverse=True)

@@ -32,7 +32,12 @@ class ImageUtil(object):
     # )
     model = models.shufflenet_v2_x0_5(pretrained=True)
     model.eval()
-    model.fc = nn.Sequential()
+    # model.fc = nn.Sequential()
+    # print(torch.__config__.parallel_info())
+    # torch.jit.enable_onednn_fusion(True)
+    # sample_input = [torch.rand(32, 3, 224, 224)]
+    # traced_model = torch.jit.trace(model, sample_input)
+    # traced_model = torch.jit.freeze(traced_model)
 
     def __init__(self, image_content):
         # print image_path

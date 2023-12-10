@@ -145,8 +145,10 @@ def process_log(log_path, similo_path, manual_path, mode="normal"):
                     old_xpath = covert_xpath_locator(old_xpath)
                     new_xpath = covert_xpath_locator(new_xpath)
                 # if web2result[web]['xpath_pair'][old_xpath] == new_xpath:
-                if web2result[web]['xpath_pair'][old_xpath] in new_xpath or new_xpath in web2result[web]['xpath_pair'][
-                    old_xpath]:
+                if (web2result[web]['xpath_pair'][old_xpath] in new_xpath or new_xpath in web2result[web]['xpath_pair'][
+                    old_xpath] ):
+                    # and abs(len(new_xpath.split('/')) - len(web2result[web]['xpath_pair'][old_xpath].split('/'))) < 4:
+                        # print('dayu', new_xpath,web2result[web]['xpath_pair'][old_xpath])
                     web2result[web]['detail'][pre_old_xpath] = 'true'
                     web2result[web]['num_correct'] += 1
                 else:
@@ -170,7 +172,8 @@ def process_log(log_path, similo_path, manual_path, mode="normal"):
 
 
 if __name__ == '__main__':
-    log_path = '/Users/wzz/Desktop/Research/scriptRepair/WebRL/report/parameter/dom0.8_image0_combine3'
+    # log_path = '/Users/wzz/Desktop/Research/scriptRepair/WebRL/report/parameter/image0.8_dom0.8_image10_combine3'
+    log_path = '/Users/wzz/Desktop/Research/scriptRepair/WebRL/report/shufflenet_v2_x1_0'
     similo_path = '/Users/wzz/Desktop/Research/scriptRepair/Similo2/WidgetLocator/apps'
     manual_path = '/Users/wzz/Desktop/Research/scriptRepair/WebRL/exp/manual_.csv'
     process_log(log_path, similo_path, manual_path, "normal")

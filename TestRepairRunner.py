@@ -11,7 +11,7 @@ import os
 
 class TestRepairRunner:
     def __init__(self,testName,url,newUrl,repairMode,speedMode=True,tool='WebRL',
-                 chromeDriverPath='/Users//Desktop/chromedriver', theta_dom=0.7, theta_image=0):
+                 chromeDriverPath='/Users//Desktop/chromedriver', theta_dom=0.7, theta_image=0,theta_combine=0):
         self.rootPath = os.getcwd()
 
         self.webName = testName
@@ -31,6 +31,7 @@ class TestRepairRunner:
         self.create_folder()
         self.theta_dom=theta_dom
         self.theta_image=theta_image
+        self.theta_combine=theta_combine
     def create_folder(self):
         if not os.path.exists(self.outputPath):
             os.mkdir(self.outputPath)
@@ -86,7 +87,7 @@ class TestRepairRunner:
 
         repair = RepairWeb.RepairWeb(self.testCaseList,
                                            self.outputPath + self.webName + '/repairedScript.py', self.sBridge, self.webName, self.outputPath,self.newUrl,
-                                           self.enableHeuristic,self.chromeDriverPath,self.repairMode,self.speedMode,self.theta_dom,self.theta_image)
+                                           self.enableHeuristic,self.chromeDriverPath,self.repairMode,self.speedMode,self.theta_dom,self.theta_image,self.theta_combine)
         repair.repair()
 
     def run_trace_repair(self):
