@@ -4,12 +4,12 @@ from os import path
 import subprocess
 from selenium import webdriver
 import pickle
-
+import json
+import csv
+import re
 from selenium.common.exceptions import NoSuchElementException
 
 from constant import web2url
-from process_log import read_pre, read_manual_csv, read_similo
-from generate_csv import write_to_csv
 
 from selenium.webdriver.chrome.options import Options
 
@@ -44,14 +44,99 @@ def make_website_dir(web, web_dir, old_dir, new_dir):
         os.system('mkdir ' + old_dir)
     if not path.exists(new_dir):
         os.system('mkdir ' + new_dir)
+def covert_xpath_locator(xpath: str):
+    return xpath.replace('svg', '*[local-name() = "svg"]')
+
+
+def convert_absolute_xpath(absolute_xpath: str):
+    # covert /html/body to /html[1]/body[1]
+    # Split the absolute XPath into individual elements
+    elements = absolute_xpath.split('/')[1:]
+    normalized_xpath = ""
+
+    for i, element in enumerate(elements):
+        # Extract the element name and index (if present)
+        match = re.match(r"([a-zA-Z0-9\-]+)(?:\[(\d+)\])?", element)
+
+        if match:
+            tag_name = match.group(1)
+            index = match.group(2)
+            # Build the normalized XPath
+            normalized_xpath += f"/{tag_name}[{index or 1}]"
+        elif 'local-name' in element:
+            normalized_xpath = normalized_xpath + '/' + element + '[1]'
+        else:
+
+            raise ValueError("Invalid absolute XPath format")
+    # print(absolute_xpath, normalized_xpath)
+    return normalized_xpath
+def read_manual_csv(manual_path, web2result: dict):
+    with open(manual_path, 'r') as file:
+        csv_reader = csv.reader(file)
+        line_count = 0
+        for row in csv_reader:
+            if line_count == 0:
+                # print(f'Column names are {", ".join(row)}')
+                line_count += 1
+            else:
+                web = row[0]
+                old_xpath = row[1]
+                new_xpath = row[2]
+                if old_xpath == '' or new_xpath == '':
+                    continue
+                old_xpath = convert_absolute_xpath(covert_xpath_locator(old_xpath))
+
+                new_xpath = convert_absolute_xpath(covert_xpath_locator(new_xpath))
+                if web not in web2result:
+                    web2result[web] = {}
+                    web2result[web]['xpath_pair'] = {}
+                    web2result[web]['num_locator'] = 0
+                web2result[web]['xpath_pair'][old_xpath] = new_xpath
+                web2result[web]['num_locator'] += 1
+
+                line_count += 1
+    return web2result
+
+
+def read_similo(similo_path):
+    web2result = {}
+    exclude_web = ['youtube', 'cnn']
+    for web in web2url:
+        if web in exclude_web:
+            continue
+        # get property
+        property_dir = similo_path + '/' + web.capitalize()
+        property_files = [name for name in os.listdir(property_dir)
+                          if name.endswith('properties')]
+        web2result[web] = {}
+        web2result[web]['property_list'] = property_files
+        web2result[web]['xpath_pair'] = {}
+        for property_file in property_files:
+            with open(property_dir + '/' + property_file) as f:
+                line = f.readline()
+                old_xpath = line.split('=', 1)[1][:-1]
+                line = f.readline()
+                new_xpath = line.split('=', 1)[1][:-1]
+                web2result[web]['xpath_pair'][old_xpath] = new_xpath
+        web2result[web]['num_locator'] = len(property_files)
+    return web2result
+
+
+def read_pre(similo_path, manual_path):
+    web2result = read_similo(similo_path)
+    web2result = read_manual_csv(manual_path, web2result)
+    return web2result
 
 if __name__ == '__main__':
 
     web2url_exp = {}
     cmd_wget = 'wget -P {} --page-requisites --convert-links {}'
-    root_dir = '/Users/wzz/Desktop/Research/scriptRepair/WebRL/'
-    similo_path = '/Users/wzz/Desktop/Research/scriptRepair/Similo2/WidgetLocator/apps'
-    manual_path = '/Users/wzz/Desktop/Research/scriptRepair/WebRL/exp/manual_.csv'
+    with open('config.json','r') as f:
+        config = json.load(f)
+    root_dir = config['root_dir']
+
+    similo_path = config['similo_path']
+    manual_path = os.path.join(root_dir,'exp','manual_.csv')
     # web2result = read_similo(similo_path)
     web2result = read_pre(similo_path, manual_path)
     # web2result = read_manual_csv(manual_path, {})
