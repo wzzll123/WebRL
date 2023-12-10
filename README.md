@@ -19,6 +19,13 @@ usage: python main.py [-t test_case] [-o old_url] [-n new_url] [-m strategy] [-c
 python main.py -t yahoo_search -o http://web.archive.org/web/20200107001908/https://www.yahoo.com/  -n http://web.archive.org/web/20220221000940/https://www.yahoo.com/ -m Hyb -c /Users/Desktop/chromedriver
 ```
 The original yahoo_search.py can be found in webTestScript/, the repaired script can be found in WebRL_output/yahoo_search.
-## Test scripts used in paper
-In the webTestScript/ directory, you can find the test scripts used in the experiments, with the old_url and new_url included at the beginning of comment lines in each script.
+## Experiment
+Our experiment builds upon the dataset established in Similo ("Similarity-based web element localization for robust test automation". ACM Trans. Softw. Eng. Methodol. 2023). To begin, clone their repository using the command `git clone https://github.com/michelnass/Similo2.git`.
+
+After cloning, navigate to the exp/ directory and modify the config.json file to specify the root path and the path to Similo.
+
+Following this, execute make_website.py in the exp/ directory to generate UI test scripts and other necessary files.
+
+Finally, run exp_similo.py to conduct the experiment and obtain the experimental results. You can customize the repair mode by modifying the repairMode variable in exp_similo.py to use different tools for the experiment.
+
 
