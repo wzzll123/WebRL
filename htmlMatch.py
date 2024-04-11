@@ -123,7 +123,7 @@ class HtmlProcess:
     def getRoot(self, htmlFile):
         # xmlFile = xmlFile.replace("&", "")
         # xmlFile = xmlFile.replace("#", "")
-        soup = BeautifulSoup(htmlFile)  # <class 'xml.etree.ElementTree.ElementTree'>
+        soup = BeautifulSoup(htmlFile, features='lxml')  # <class 'xml.etree.ElementTree.ElementTree'>
         # 获取根节点 <Element 'data' at 0x02BF6A80>
         # 去除script、style等标签
         for NotBodyTag in self.NonBodyTag:

@@ -1,7 +1,30 @@
 # encoding=utf-8
+import re
 import time
 
 
+def normarlizaXpath(absolute_xpath: str):
+    # covert /html/body to /html[1]/body[1]
+    # Split the absolute XPath into individual elements
+    elements = absolute_xpath.split('/')[1:]
+    normalized_xpath = ""
+
+    for i, element in enumerate(elements):
+        # Extract the element name and index (if present)
+        match = re.match(r"([a-zA-Z0-9\-]+)(?:\[(\d+)\])?", element)
+
+        if match:
+            tag_name = match.group(1)
+            index = match.group(2)
+            # Build the normalized XPath
+            normalized_xpath += f"/{tag_name}[{index or 1}]"
+        elif 'local-name' in element:
+            normalized_xpath = normalized_xpath + '/' + element + '[1]'
+        else:
+
+            raise ValueError("Invalid absolute XPath format")
+    # print(absolute_xpath, normalized_xpath)
+    return normalized_xpath
 def generateXpathFromSeleniumElement(el,currentXpathString):
     childTag=el.tag_name
     if(childTag=="html"):

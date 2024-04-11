@@ -32,6 +32,7 @@ class ImageUtil(object):
     # )
     model = models.shufflenet_v2_x0_5(pretrained=True)
     model.eval()
+
     # model.fc = nn.Sequential()
     # print(torch.__config__.parallel_info())
     # torch.jit.enable_onednn_fusion(True)
@@ -650,12 +651,45 @@ class ImageUtil(object):
             ImageUtil.dfsSeleniumNode(el, newVerSionImgPath, isLong, rankedAllLeafNode, oldImgFeature, widgetLocation)
 
     @staticmethod
+    def getSimilarLeafNodeByCNNAccumulate(widgetLocation, oldVersionImgPath, newVerSionImgPath, allLeafNode, theta):
+        rankedAllLeafNode = []
+        oldImg = ImageUtil.openCropImg(oldVersionImgPath, widgetLocation)
+        isLong = False
+        if (widgetLocation['w'] / widgetLocation['h'] > 4 or widgetLocation['h'] / widgetLocation['w'] > 4):
+            isLong = True
+        oldImgFeature = ImageUtil.imgToFeatureTensor(oldImg, isLong)
+        from PIL import Image
+        newAllImg = Image.open(newVerSionImgPath)
+        allLeafNodeTensors = []
+        index2Node = {}
+        index = 0
+        for leafNode in allLeafNode:
+            edge = 0
+            newImg = newAllImg.crop((leafNode['x'] - edge, leafNode['y'] - edge,
+                                     leafNode['x'] + leafNode['w'] + 2 * edge
+                                     , leafNode['y'] + leafNode['h'] + 2 * edge))
+            newImg = newImg.convert('RGB')
+            imgTensorInput = ImageUtil.imgToOriginFeatureTensor(newImg)
+            allLeafNodeTensors.append(imgTensorInput)
+            index2Node[index] = leafNode
+            index += 1
+        concatenatedTensor = torch.cat([tensor.unsqueeze(0) for tensor in allLeafNodeTensors], dim=0)
+        concatenatedFeature = ImageUtil.getConvOutput(concatenatedTensor)
+        similarities = torch.cosine_similarity(oldImgFeature, concatenatedFeature)
+        for index in index2Node:
+            if similarities[index] > 0.5:
+                rankedAllLeafNode.append((index2Node[index], similarities[index]))
+        sorted(rankedAllLeafNode, key=lambda t: t[1], reverse=True)
+        return rankedAllLeafNode
+
+    @staticmethod
     def getSimilarLeafNodeByCNN(widgetLocation, oldVersionImgPath, newVerSionImgPath, allLeafNode, theta):
+        longCriteria = 3
         rankedAllLeafNode = []
         oldImg = ImageUtil.openCropImg(oldVersionImgPath, widgetLocation)
         # oldImg.save("old.png")
         isLong = False
-        if (widgetLocation['w'] / widgetLocation['h'] > 4 or widgetLocation['h'] / widgetLocation['w'] > 4):
+        if widgetLocation['w'] / widgetLocation['h'] > longCriteria or widgetLocation['h'] / widgetLocation['w'] > longCriteria:
             isLong = True
 
         oldImgFeature = ImageUtil.imgToFeatureTensor(oldImg, isLong)
@@ -663,10 +697,9 @@ class ImageUtil(object):
         newAllImg = Image.open(newVerSionImgPath)
 
         for leafNode in allLeafNode:
-            # abs(leafNode.attrs['h']-widgetLocation['h'])<100 or abs(leafNode.attrs['w']-widgetLocation['w'])<100 or
-            # if(abs(leafNode.attrs['h']-widgetLocation['h'])<100 or abs(leafNode.attrs['w']-widgetLocation['w'])<100 or 0.7*widgetLocation['h']
-            # <leafNode.attrs['h']<1.3*widgetLocation['h'] or 0.7*widgetLocation['w']<leafNode.attrs['w']<1.3*widgetLocation['w']):
-            # newImg = ImageUtil.openCropImg(newVerSionImgPath, leafNode)
+            if isLong:
+                if leafNode['w'] / leafNode['h'] < longCriteria and leafNode['h'] / leafNode['w'] < longCriteria:
+                    continue
             edge = 0
             newImg = newAllImg.crop((leafNode['x'] - edge, leafNode['y'] - edge,
                                      leafNode['x'] + leafNode['w'] + 2 * edge
@@ -674,7 +707,7 @@ class ImageUtil(object):
             newImg = newImg.convert('RGB')
             newImgFeature = ImageUtil.imgToFeatureTensor(newImg, isLong)
             similarity = torch.cosine_similarity(oldImgFeature, newImgFeature)
-            if (similarity[0] > theta):
+            if similarity[0] > theta:
                 rankedAllLeafNode.append((leafNode, similarity[0]))
             # else:
             #     continue
@@ -694,17 +727,28 @@ class ImageUtil(object):
 
     @staticmethod
     def imgToFeatureTensor(img, isLong):
-        return ImageUtil.imgToFeatureTensorTrim(img)
-        # if(isLong):
-        #     return ImageUtil.imgToFeatureTensorLong(img)
-        # else:
-        #     return ImageUtil.imgToFeatureTensorNotLong(img)
+        # return ImageUtil.imgToFeatureTensorTrim(img)
+        if isLong:
+            return ImageUtil.imgToFeatureTensorLong(img)
+        else:
+            return ImageUtil.imgToFeatureTensorNotLong(img)
+
+    @staticmethod
+    def imgToOriginFeatureTensor(img):
+        dataTransfroms = transforms.Compose([
+            # transforms.Resize(256),
+            transforms.Resize([224, 224]),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ])
+        imgTensor = dataTransfroms(img)
+        return imgTensor
 
     @staticmethod
     def imgToFeatureTensorTrim(img):
         dataTransfroms = transforms.Compose([
             # transforms.Resize(256, interpolation=transforms.InterpolationMode.BILINEAR),
-            transforms.Resize(256),
+            transforms.Resize([224, 224]),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
@@ -717,7 +761,7 @@ class ImageUtil(object):
         dataTransfroms = transforms.Compose([
             # transforms.Resize([32, 32]),
             #
-            transforms.Resize(256),
+            transforms.Resize([224, 224]),
             # transforms.CenterCrop(250),
             # transforms.Grayscale(3),
             transforms.ToTensor(),
@@ -731,7 +775,7 @@ class ImageUtil(object):
     def imgToFeatureTensorLong(img):
         dataTransfroms = transforms.Compose([
             # transforms.Resize([32, 32]),
-            transforms.Resize(256),
+            transforms.Resize(224),
             # transforms.Grayscale(3),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
@@ -760,8 +804,6 @@ class ImageUtil(object):
         # model = models.shufflenet_v2_x1_0(pretrained=True)
         # model.eval()
         # model.fc=nn.Sequential()
-
-
 
         with torch.no_grad():
             imgTensor = ImageUtil.model(imgTensor)

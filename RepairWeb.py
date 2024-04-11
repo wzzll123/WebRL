@@ -1,21 +1,20 @@
 # -*- coding: utf-8 -*-
+import json
 import pickle
-import time
+import subprocess
 from functools import wraps
+
+import xpathProcess
 
 success = True
 
-import Levenshtein
 import ImageUtil
 
 from selenium import webdriver
 import time
 from PIL import Image
 import RecordScreenAndWidght
-from datetime import datetime
 import os
-import math
-import shelve
 import base64
 import htmlMatch
 from selenium.webdriver.chrome.options import Options
@@ -30,6 +29,7 @@ class RepairWeb():
 
     def __init__(self, testCaseList, repairScriptPath, sBridge, webName, output, newUrl, enableHeuristic,
                  chromeDriverPath, repairMode, speedMode, theta_dom=0.7, theta_image=0.6, theta_combine=3):
+        self.outputDir = output
         self.testCaseList = testCaseList
         self.repairedScript = repairScriptPath
         self.webName = webName
@@ -407,6 +407,9 @@ class RepairWeb():
     def getCandidatesByCNN(self, widgetLocation, baseImagePath, currentImagePath, allLeafNode, theta):
         similarLeafNode = ImageUtil.ImageUtil.getSimilarLeafNodeByCNN(widgetLocation, baseImagePath, currentImagePath,
                                                                       allLeafNode, theta)
+        # similarLeafNode = ImageUtil.ImageUtil.getSimilarLeafNodeByCNNAccumulate(widgetLocation, baseImagePath, currentImagePath,
+        #                                                               allLeafNode, theta)
+
         rankedAllLeafNode = sorted(similarLeafNode, key=lambda t: t[1], reverse=True)
         return rankedAllLeafNode
 
@@ -415,7 +418,7 @@ class RepairWeb():
         if len(matchDic) == 0:
             matchType = "noneMatch"
         elif len(matchDic) == 1 or (matchDic[0][1] - matchDic[1][1] > 0.5):
-        # elif len(matchDic) == 1:
+            # elif len(matchDic) == 1:
             return "sureMatch"
         elif matchDic[0][1] >= 1:
             # todo: not just 1, maybe 2,3,4
@@ -483,6 +486,9 @@ class RepairWeb():
             print(e)
 
     def processImageElementSelenium(self, root, oldTestStep, base_image, current_image):
+
+        # rankedAllLeafNode = ImageUtil.ImageUtil.getSimilarLeafNodeByCNNAccumulate(oldTestStep['widget'], base_image,
+        #                                                                         current_image, root)
         rankedAllLeafNode = ImageUtil.ImageUtil.getSimilarLeafNodeByCNNSelenium(oldTestStep['widget'], base_image,
                                                                                 current_image, root)
         print("All possible match node:")
@@ -513,6 +519,46 @@ class RepairWeb():
             candidate = final_list[0][0]
             self.perform_save_repair(candidate, oldTestStep)
         return rankedAllLeafNode
+
+
+
+    def getWebEvoMatchedXpath(self, oldJson, newJson, baseImage, currentImage):
+        # Run the Java program
+        # java_output = subprocess.check_output(
+        #         ['java', '-cp', 'WebEvo.jar', 'frame.algorithm.webevo.WebEvoWrapper', oldJson, newJson, baseImage, currentImage])
+        try:
+            java_output = subprocess.check_output(
+                ['java', '-cp', 'WebEvo.jar', 'frame.algorithm.webevo.WebEvoWrapper', oldJson, newJson, baseImage, currentImage])
+        except subprocess.CalledProcessError:
+            return None
+        java_output_str = java_output.decode('utf-8').strip()
+        if java_output_str == 'null':
+            return None
+        else:
+            return java_output_str
+
+
+
+    def getSFTMMatcher(self, oldHtmlPath, newHtmlPath):
+        # Run the Java program
+        try:
+            java_output = subprocess.check_output(
+                ['java', '-cp', 'SFTM.jar', 'TreeMatcherWrapper', oldHtmlPath, newHtmlPath])
+        except subprocess.CalledProcessError:
+            return {}
+
+        # Decode the byte string into a regular string
+        java_output_str = java_output.decode('utf-8')
+
+        # Initialize an empty dictionary
+        java_map_dict = {}
+
+        # Split the lines and populate the dictionary
+        for line in java_output_str.split('\n'):
+            if line.strip():  # Ignore empty lines
+                key, value = line.split(':')
+                java_map_dict[key.strip()] = value.strip()
+        return java_map_dict
 
     # 修复每个具体的test case
     def instrumentDriver(self, testCaseIndex):
@@ -557,7 +603,71 @@ class RepairWeb():
                 continue
             except:
                 print("encounter a broken test step")
-            if (self.repairMode == 'CNN'):
+            if self.repairMode == 'webEvo':
+                oldNodes = [{'text': oldHtmlNode.text,
+                             'xpath': oldHtmlNode.attrs['xpath'],
+                             'x': oldTestStep['widget']['x'],
+                             'y': oldTestStep['widget']['y'],
+                             'w': oldTestStep['widget']['w'],
+                             'h': oldTestStep['widget']['h']}]
+                # Write the dictionary to a JSON file
+                with open(os.path.join(self.outputDir, 'oldNodes.json'), 'w') as json_file:
+                    json.dump(oldNodes, json_file, indent=4)
+
+                allNode, rootSoup = self.getAllLeafNode(currentHtml)
+                allNode = self.assignNodeLocation(allNode)
+                newNodes = []
+                for node in allNode:
+                    newNodes.append(
+                        {'text': node.text,
+                         'xpath': node.attrs['xpath'],
+                         'x': node.attrs['x'],
+                         'y': node.attrs['y'],
+                         'w': node.attrs['w'],
+                         'h': node.attrs['h']})
+                # Write the dictionary to a JSON file
+                with open(os.path.join(self.outputDir, 'newNodes.json'), 'w') as json_file:
+                    json.dump(newNodes, json_file, indent=4)
+                matchedXpath = self.getWebEvoMatchedXpath(os.path.join(self.outputDir, 'oldNodes.json'),
+                      os.path.join(self.outputDir, 'newNodes.json'),
+                      self.base_image, self.current_image)
+                if matchedXpath is not None:
+                    for node in allNode:
+                        if node.attrs['xpath'] == matchedXpath:
+                            candidate = node
+                            print("xpath of candidate is:")
+                            print(candidate.attrs['xpath'])
+                            try:
+                                el_repair = self.getSeleniumElement(candidate)
+                                self.performTestAction(oldTestStep, el_repair)
+                            except Exception as e:
+                                print(e)
+                oldActionPointer += 1
+                continue
+            if self.repairMode == 'SFTM':
+                xpathMatcher = self.getSFTMMatcher(oldTestStep['htmlPathInit'], oldTestStep['htmlPath'])
+                normalizedXpathMatcher = {}
+                from xpathProcess import normarlizaXpath
+                for sourceXpath in xpathMatcher:
+                    normalizedXpathMatcher[normarlizaXpath(sourceXpath)] = normarlizaXpath(xpathMatcher[sourceXpath])
+                allNode, rootSoup = self.getAllLeafNode(currentHtml)
+                if oldTestStep["xpath"] in normalizedXpathMatcher:
+                    matchedXpath = normalizedXpathMatcher[oldTestStep['xpath']]
+                    for node in allNode:
+                        if node.attrs['xpath'] == matchedXpath:
+                            candidate = node
+                            print("xpath of candidate is:")
+                            print(candidate.attrs['xpath'])
+                            try:
+                                el_repair = self.getSeleniumElement(candidate)
+                                self.performTestAction(oldTestStep, el_repair)
+                            except Exception as e:
+                                print(e)
+
+                oldActionPointer += 1
+                continue
+
+            if self.repairMode == 'CNN':
                 # allNode, rootSoup = self.getAllLeafNode(currentHtml)
                 # self.getNodeLocationByRoot(rootSoup,True,oldTestStep['widget'])
                 # print(len(self.allNodeRec))
@@ -567,7 +677,7 @@ class RepairWeb():
                 self.processImageElement(allNode, oldTestStep, base_image, current_image, 0)
                 oldActionPointer += 1
                 continue
-            if (self.repairMode == 'COLOR'):
+            if self.repairMode == 'COLOR':
                 allNode, rootSoup = self.getAllLeafNode(currentHtml)
                 allNode = self.assignNodeLocation(allNode)
                 # print(len(allNode))
@@ -585,7 +695,7 @@ class RepairWeb():
                     print(e)
                 oldActionPointer += 1
                 continue
-            if (self.repairMode == 'Hyb'):
+            if self.repairMode == 'Hyb':
                 matchDic, allLeafNode, allNode, rootSoup = self.getDicInNewHtml(oldHtmlNode, currentHtml,
                                                                                 theta=self.theta_dom)
                 # matchDic,allLeafNode,allNode=self.getDicInNewHtml(oldHtmlNode,currentHtml,theta=0.8)
