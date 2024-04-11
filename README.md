@@ -9,7 +9,7 @@ python3, Selenium, torch, Levenshtein, BeautifulSoup, torchvision, PIL
 usage: python main.py [-t test_case] [-o old_url] [-n new_url] [-m strategy] [-c chromedriver_path]
 - optional arguments:
   -t test_case          the name of a test script that needed in the directory webTestScript/
-  -m strategy           the repair strategy to apply (Hyb, COLOR and CNN)
+  -m strategy           the repair strategy to apply (Hyb, COLOR, CNN, webEvo and SFTM)
   -o old_url            
   -n new_url         
   -c chromedriver_path   
